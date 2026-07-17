@@ -1,0 +1,7 @@
+.agents
+.idea
+.venv
+/data/
+__pycache__/
+config_local.py
+
