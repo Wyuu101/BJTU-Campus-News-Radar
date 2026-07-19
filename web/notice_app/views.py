@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import json
-import random
 import re
 import time
 
+from django.conf import settings
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from web.notice_app.crypto import decrypt_email
+from web.notice_app.captcha_utils import create_captcha_payload, validate_captcha_answer
 from web.notice_app.models import Subscriber
 from web.notice_app.services import (
     deactivate_subscriber,
@@ -32,6 +33,9 @@ LOGIN_RATE_LIMIT_SECONDS = 1.0
 # 基于进程内内存的 IP 限流记录；后续多进程部署可替换为 Redis。
 _LOGIN_RATE_LIMIT_BY_IP: dict[str, float] = {}
 
+# 基于进程内内存的图形验证码刷新限流记录；后续多进程部署可替换为 Redis。
+_CAPTCHA_REFRESH_RATE_LIMIT_BY_IP: dict[str, float] = {}
+
 
 # 渲染登录页；已登录用户直接进入个性化设置页。
 @ensure_csrf_cookie
@@ -49,14 +53,20 @@ def settings_page(request: HttpRequest):
     return render(request, "notice_app/settings.html")
 
 
-# 生成本地图形验证码问题，当前用简单加法占位。
+# 生成图形验证码图片信息。
 @require_GET
 def api_captcha(request: HttpRequest) -> JsonResponse:
-    # 使用小整数加法，便于后续替换成正式图形验证码服务。
-    left = random.randint(2, 9)
-    right = random.randint(2, 9)
-    request.session["captcha_answer"] = str(left + right)
-    return JsonResponse({"question": f"{left} + {right} = ?"})
+    # 对用户主动刷新验证码做 1 秒限流，避免刷爆验证码图片生成。
+    allowed, wait_seconds = _check_captcha_refresh_rate_limit(request)
+    if not allowed:
+        return JsonResponse(
+            {"ok": False, "message": "操作太快，请稍后再换一张。", "retryAfter": wait_seconds},
+            status=429,
+        )
+
+    # 生成并返回图片验证码 key 和图片 URL。
+    captcha_payload = create_captcha_payload()
+    return JsonResponse({"ok": True, "captcha": _captcha_payload_dict(captcha_payload)})
 
 
 # 校验图形验证码并发送邮箱验证码。
@@ -66,17 +76,26 @@ def api_request_code(request: HttpRequest) -> JsonResponse:
     payload = _json_payload(request)
     email = str(payload.get("email", "")).strip()
     captcha = str(payload.get("captcha", "")).strip()
+    captcha_key = str(payload.get("captchaKey", "")).strip()
 
     # 邮箱格式不合法时提前拒绝，避免无意义发送。
     if not EMAIL_RE.match(email):
         return JsonResponse({"ok": False, "message": "邮箱格式有点不对。"}, status=400)
 
-    # 图形验证码不匹配时拒绝发送邮箱验证码。
-    if captcha != request.session.get("captcha_answer"):
-        return JsonResponse({"ok": False, "message": "图形验证码没有对上，请再试一次。"}, status=400)
+    # 图形验证码不匹配时拒绝发送，并直接返回下一张验证码。
+    if not validate_captcha_answer(captcha_key, captcha):
+        captcha_payload = create_captcha_payload()
+        return JsonResponse(
+            {
+                "ok": False,
+                "message": "图形验证码没有对上，请再试一次。",
+                "captcha": _captcha_payload_dict(captcha_payload),
+            },
+            status=400,
+        )
 
     # 调用服务层创建验证码记录并按冷却规则发送邮件。
-    ok, message, cooldown = request_login_code(email, _client_ip(request))
+    ok, message, cooldown = request_login_code(email)
     status = 200 if ok else 429
     return JsonResponse({"ok": ok, "message": message, "cooldown": cooldown}, status=status)
 
@@ -233,3 +252,37 @@ def _check_login_rate_limit(request: HttpRequest) -> tuple[bool, float]:
     request.session[session_key] = now
     _LOGIN_RATE_LIMIT_BY_IP[client_key] = now
     return True, 0.0
+
+
+# 检查图形验证码刷新接口是否触发频率限制。
+def _check_captcha_refresh_rate_limit(request: HttpRequest) -> tuple[bool, float]:
+    # monotonic 时间不受系统时间变更影响，适合短间隔限流。
+    now = time.monotonic()
+    client_key = _client_ip(request) or "unknown"
+    session_key = "last_captcha_refresh_at"
+    limit_seconds = float(settings.CAPTCHA_REFRESH_RATE_LIMIT_SECONDS)
+
+    # 同时参考 session 和 IP 两个维度，降低刷新 session 绕过概率。
+    timestamps = [
+        float(request.session.get(session_key, 0.0) or 0.0),
+        _CAPTCHA_REFRESH_RATE_LIMIT_BY_IP.get(client_key, 0.0),
+    ]
+
+    # 频率过高时返回剩余等待时间。
+    last_refresh = max(timestamps)
+    elapsed = now - last_refresh
+    if elapsed < limit_seconds:
+        return False, limit_seconds - elapsed
+
+    # 记录本次刷新时间。
+    request.session[session_key] = now
+    _CAPTCHA_REFRESH_RATE_LIMIT_BY_IP[client_key] = now
+    return True, 0.0
+
+
+# 将 CaptchaPayload 转换为前端 JSON 字典。
+def _captcha_payload_dict(captcha_payload) -> dict[str, str]:
+    return {
+        "key": captcha_payload.key,
+        "imageUrl": captcha_payload.image_url,
+    }

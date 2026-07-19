@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from django.urls import path
+from django.urls import include, path
 
 from web.notice_app import views
 
@@ -18,4 +18,5 @@ urlpatterns = [
     path("api/preferences/", views.api_preferences, name="api_preferences"),
     path("api/account/", views.api_delete_account, name="api_delete_account"),
     path("api/public-stats/", views.api_public_stats, name="api_public_stats"),
+    path("captcha/", include("captcha.urls")),
 ]

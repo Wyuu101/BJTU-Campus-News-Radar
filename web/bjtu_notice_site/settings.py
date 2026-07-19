@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.staticfiles",
+    "captcha",
     "web.notice_app",
 ]
 
@@ -112,6 +113,46 @@ EMAIL_CODE_COOLDOWN_SECONDS = 60
 
 # 单个验证码允许尝试的最大次数。
 EMAIL_CODE_MAX_ATTEMPTS = 6
+
+# 图形验证码图片刷新接口最小请求间隔，单位秒。
+CAPTCHA_REFRESH_RATE_LIMIT_SECONDS = 1.0
+
+# 图形验证码字符长度。
+CAPTCHA_LENGTH = 5
+
+# 图形验证码有效期，单位分钟。
+CAPTCHA_TIMEOUT = 3
+
+# 图形验证码图片尺寸，宽高单位为像素。
+CAPTCHA_IMAGE_SIZE = (150, 52)
+
+# 图形验证码字体大小。
+CAPTCHA_FONT_SIZE = 30
+
+# 图形验证码字符旋转角度范围。
+CAPTCHA_LETTER_ROTATION = (-42, 42)
+
+# 图形验证码背景颜色。
+CAPTCHA_BACKGROUND_COLOR = "#fff7ed"
+
+# 图形验证码默认前景颜色。
+CAPTCHA_FOREGROUND_COLOR = "#5f4735"
+
+# 图形验证码字符颜色函数，让每个字符颜色轻微变化。
+CAPTCHA_LETTER_COLOR_FUNCT = "web.notice_app.captcha_utils.captcha_letter_color"
+
+# 图形验证码挑战生成函数，避免只出现单一小写字母。
+CAPTCHA_CHALLENGE_FUNCT = "web.notice_app.captcha_utils.captcha_challenge"
+
+# 图形验证码噪声函数，叠加线条、点和额外干扰线。
+CAPTCHA_NOISE_FUNCTIONS = (
+    "captcha.helpers.noise_arcs",
+    "captcha.helpers.noise_dots",
+    "web.notice_app.captcha_utils.captcha_noise_lines",
+)
+
+# 图形验证码滤镜函数，保持库默认平滑处理。
+CAPTCHA_FILTER_FUNCTIONS = ("captcha.helpers.post_smooth",)
 
 # 邮箱对称加密密钥文件路径；真实密钥文件不提交仓库。
 EMAIL_ENCRYPTION_KEY_PATH = BASE_DIR / "web" / "secrets" / "email_encryption.key"

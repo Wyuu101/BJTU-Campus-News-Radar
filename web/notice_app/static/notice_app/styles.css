@@ -161,6 +161,24 @@ input {
   margin-top: 12px;
 }
 
+.chart-value-label {
+  fill: #6e5a49;
+  font-size: 13px;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.chart-point {
+  cursor: pointer;
+  transition: r .16s ease, stroke .16s ease, stroke-width .16s ease;
+}
+
+.chart-point:hover {
+  r: 8px;
+  stroke: #2f73c8;
+  stroke-width: 4px;
+}
+
 .user-card {
   position: relative;
   display: inline-flex;
@@ -463,9 +481,50 @@ input:focus {
 }
 
 .inline-field {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
+}
+
+.captcha-image-button {
+  width: 112px;
+  height: 46px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff8ef;
+  cursor: pointer;
+}
+
+.captcha-image-button img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.captcha-rate-tip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 4;
+  display: none;
+  max-width: 220px;
+  padding: 9px 11px;
+  border: 1px solid rgba(180, 145, 112, .45);
+  border-radius: 14px;
+  background: #fffaf5;
+  color: #7a4f2d;
+  box-shadow: 0 12px 28px rgba(91, 68, 48, .16);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.captcha-rate-tip.visible {
+  display: block;
 }
 
 .primary-button,

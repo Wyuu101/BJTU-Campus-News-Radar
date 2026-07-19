@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 from dataclasses import dataclass
-from pathlib import Path
 
 import config
 
@@ -17,11 +17,11 @@ class SourceSection:
     section_name: str
 
 
-# 自动发现当前项目中可订阅的去重板块。
+# 自动发现当前配置中已启用的可订阅板块。
 def discover_sections() -> list[SourceSection]:
-    """Discover unique section names from configured and local scrape modules."""
+    """Discover unique section names from enabled scrape modules."""
 
-    # 合并配置中显式启用的模块和本地 scrape_section_*.py 文件。
+    # 只读取 config.SOURCE_ADAPTERS 中启用的模块，未启用脚本不会展示到前端。
     module_names = _candidate_module_names()
 
     # 用 section_name 去重，避免不同脚本展示重复板块选项。
@@ -46,14 +46,11 @@ def discover_sections() -> list[SourceSection]:
 
 # 收集所有候选爬虫模块名，并保持顺序去重。
 def _candidate_module_names() -> list[str]:
-    # 先读取配置中启用的爬虫模块，保持 runner 的业务顺序。
+    # 读取配置中启用的爬虫模块，保持 runner 的业务顺序。
     names: list[str] = []
     for module_name, _function_name in getattr(config, "SOURCE_ADAPTERS", []):
-        names.append(module_name)
-
-    # 再扫描本地 scrape_section_*.py，支持新增脚本后前端自动出现。
-    for path in sorted(Path(config.BASE_DIR).glob("scrape_section_*.py")):
-        names.append(path.stem)
+        if importlib.util.find_spec(module_name) is not None:
+            names.append(module_name)
 
     # 顺序去重，避免同一模块被配置和扫描重复加入。
     seen: set[str] = set()

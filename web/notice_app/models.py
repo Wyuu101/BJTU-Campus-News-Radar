@@ -58,9 +58,6 @@ class EmailVerification(models.Model):
     # 验证码被成功使用的时间。
     used_at = models.DateTimeField(null=True, blank=True)
 
-    # 请求验证码的客户端 IP，供后续风控扩展。
-    client_ip = models.GenericIPAddressField(null=True, blank=True)
-
     # 验证码记录创建时间。
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -1,4 +1,4 @@
-# 兼容 sources 包导入方式，实际逻辑仍在独立脚本 scrape_section_01.py。
-from scrape_section_01 import crawl
+# 兼容 sources 包导入方式，实际逻辑仍在 scrape_scripts.scrape_section_01。
+from scrape_scripts.scrape_section_01 import crawl
 
 __all__ = ["crawl"]

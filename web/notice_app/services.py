@@ -73,7 +73,7 @@ def get_effective_preferences(subscriber: Subscriber) -> list[str]:
 
 
 # 创建邮箱验证码记录并发送验证码邮件。
-def request_login_code(email: str, client_ip: str | None = None) -> tuple[bool, str, int]:
+def request_login_code(email: str) -> tuple[bool, str, int]:
     # 规范化邮箱并读取当前时间。
     normalized = normalize_email(email)
     now = timezone.now()
@@ -94,7 +94,6 @@ def request_login_code(email: str, client_ip: str | None = None) -> tuple[bool, 
         code_hash=_hash_code(code),
         expires_at=now + timedelta(seconds=settings.EMAIL_CODE_TTL_SECONDS),
         cooldown_until=now + timedelta(seconds=settings.EMAIL_CODE_COOLDOWN_SECONDS),
-        client_ip=client_ip,
     )
 
     # 发送验证码邮件；SMTP 未配置时函数内部会安全跳过。
@@ -172,6 +171,7 @@ def record_new_notice_count(count: int) -> None:
         date=timezone.localdate(),
         defaults={"new_notice_count": 0},
     )
+    print(timezone.localdate())
 
     # 用数据库自增表达式避免并发运行 runner 时覆盖计数。
     DailyMetric.objects.filter(pk=metric.pk).update(new_notice_count=F("new_notice_count") + count)

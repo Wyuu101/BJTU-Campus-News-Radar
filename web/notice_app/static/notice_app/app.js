@@ -14,7 +14,10 @@ const api = async (url, options = {}) => {
   });
   const data = await response.json();
   if (!response.ok || data.ok === false) {
-    throw new Error(data.message || "请求没有成功，请稍后再试。");
+    const error = new Error(data.message || "请求没有成功，请稍后再试。");
+    error.data = data;
+    error.status = response.status;
+    throw error;
   }
   return data;
 };
@@ -101,7 +104,8 @@ const drawChart = (points) => {
     </defs>
     <path d="M ${padding} ${height - padding} H ${width - padding}" stroke="#dfd0c1" stroke-width="2" fill="none"/>
     <path d="${path}" stroke="url(#lineGradient)" stroke-width="5" stroke-linecap="round" fill="none"/>
-    ${coords.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="5" fill="#fffaf5" stroke="#7c4f2c" stroke-width="3"><title>${point.date}: ${point.count}</title></circle>`).join("")}
+    ${coords.map((point) => `<text class="chart-value-label" x="${point.x}" y="${Math.max(18, point.y - 14)}" text-anchor="middle">${point.count}</text>`).join("")}
+    ${coords.map((point) => `<circle class="chart-point" cx="${point.x}" cy="${point.y}" r="5" fill="#fffaf5" stroke="#7c4f2c" stroke-width="3"><title>${point.date}: ${point.count}</title></circle>`).join("")}
     ${coords.map((point, index) => `<text x="${point.x}" y="${height - 8}" text-anchor="${index === 0 ? "start" : index === coords.length - 1 ? "end" : "middle"}" fill="#8a7a6b" font-size="12">${point.date.slice(5)}</text>`).join("")}
   `;
 };
@@ -110,17 +114,39 @@ const initLogin = async () => {
   const form = document.getElementById("loginForm");
   if (!form) return;
   const captchaButton = document.getElementById("captchaButton");
+  const captchaImage = document.getElementById("captchaImage");
+  const captchaRateTip = document.getElementById("captchaRateTip");
   const sendCodeButton = document.getElementById("sendCodeButton");
   const emailInput = document.getElementById("emailInput");
   const captchaInput = document.getElementById("captchaInput");
   const codeInput = document.getElementById("codeInput");
   const privacyConsentInput = document.getElementById("privacyConsentInput");
   let cooldownTimer = null;
+  let captchaKey = "";
+  let captchaTipTimer = null;
+
+  const applyCaptcha = (captcha) => {
+    captchaKey = captcha.key;
+    captchaImage.src = captcha.imageUrl;
+    captchaInput.value = "";
+  };
+
+  const showCaptchaRateTip = (message) => {
+    captchaRateTip.textContent = message;
+    captchaRateTip.classList.add("visible");
+    clearTimeout(captchaTipTimer);
+    captchaTipTimer = setTimeout(() => {
+      captchaRateTip.classList.remove("visible");
+    }, 1800);
+  };
 
   const refreshCaptcha = async () => {
-    const data = await api("/api/captcha/", { method: "GET" });
-    captchaButton.textContent = data.question;
-    captchaInput.value = "";
+    try {
+      const data = await api("/api/captcha/", { method: "GET" });
+      applyCaptcha(data.captcha);
+    } catch (error) {
+      showCaptchaRateTip(error.message || "操作太快，请稍后再换一张。");
+    }
   };
 
   const startCooldown = (seconds) => {
@@ -145,12 +171,18 @@ const initLogin = async () => {
     try {
       const data = await api("/api/request-code/", {
         method: "POST",
-        body: JSON.stringify({ email: emailInput.value, captcha: captchaInput.value }),
+        body: JSON.stringify({
+          email: emailInput.value,
+          captcha: captchaInput.value,
+          captchaKey,
+        }),
       });
       startCooldown(data.cooldown || 60);
       modal.show("已寄出", data.message);
     } catch (error) {
-      refreshCaptcha();
+      if (error.data && error.data.captcha) {
+        applyCaptcha(error.data.captcha);
+      }
       modal.show("再看一眼", error.message);
     }
   });

@@ -47,8 +47,11 @@
         <label>
           <span>图形验证码</span>
           <div class="inline-field">
-            <input id="captchaInput" type="text" inputmode="numeric" placeholder="算一下" required>
-            <button id="captchaButton" type="button" class="ghost-button"></button>
+            <input id="captchaInput" type="text" autocomplete="off" placeholder="输入图片字符" required>
+            <button id="captchaButton" type="button" class="captcha-image-button" aria-label="换一张图形验证码">
+              <img id="captchaImage" alt="图形验证码">
+            </button>
+            <span id="captchaRateTip" class="captcha-rate-tip" role="tooltip">操作太快，请稍后再换一张。</span>
           </div>
         </label>
 

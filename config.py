@@ -25,23 +25,23 @@ REQUEST_TIMEOUT_SECONDS = 15.0
 # 同一个板块连续请求之间的等待时间，单位秒，避免访问过于频繁。
 REQUEST_DELAY_SECONDS = 0.1
 
-# 每个网页板块一个独立脚本；元组格式为：("模块名", "入口函数名")。
+# 每个网页板块一个独立脚本；元组格式为：("模块导入路径", "入口函数名")。
 SOURCE_ADAPTERS = [
-    ("scrape_section_01", "crawl"),
-    ("scrape_section_02", "crawl"),
-    ("scrape_section_03", "crawl"),
-    ("scrape_section_04", "crawl"),
-    ("scrape_section_05", "crawl"),
-    ("scrape_section_06", "crawl"),
-    ("scrape_section_07", "crawl"),
-    ("scrape_section_08", "crawl"),
-    ("scrape_section_09", "crawl"),
-    ("scrape_section_10", "crawl"),
-    ("scrape_section_11", "crawl"),
-    ("scrape_section_12", "crawl"),
-    ("scrape_section_13", "crawl"),
-    ("scrape_section_14", "crawl"),
-    ("scrape_section_15", "crawl"),
+    ("scrape_scripts.scrape_section_01", "crawl"),
+    # ("scrape_scripts.scrape_section_02", "crawl"),
+    # ("scrape_scripts.scrape_section_03", "crawl"),
+    # ("scrape_scripts.scrape_section_04", "crawl"),
+    # ("scrape_scripts.scrape_section_05", "crawl"),
+    # ("scrape_scripts.scrape_section_06", "crawl"),
+    # ("scrape_scripts.scrape_section_07", "crawl"),
+    # ("scrape_scripts.scrape_section_08", "crawl"),
+    # ("scrape_scripts.scrape_section_09", "crawl"),
+    # ("scrape_scripts.scrape_section_10", "crawl"),
+    # ("scrape_scripts.scrape_section_11", "crawl"),
+    # ("scrape_scripts.scrape_section_12", "crawl"),
+    # ("scrape_scripts.scrape_section_13", "crawl"),
+    # ("scrape_scripts.scrape_section_14", "crawl"),
+    # ("scrape_scripts.scrape_section_15", "crawl"),
 ]
 
 # SMTP 服务器端口；SSL 通常为 465，STARTTLS 通常为 587。
