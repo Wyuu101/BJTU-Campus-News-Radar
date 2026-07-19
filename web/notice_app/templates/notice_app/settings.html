@@ -1,0 +1,49 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>个性化设置 - BJTU Notice Monitor</title>
+  <link rel="stylesheet" href="{% static 'notice_app/styles.css' %}">
+</head>
+<body class="page page-settings">
+  <main class="settings-shell">
+    <section class="settings-hero">
+      <h1>个性化设置</h1>
+    </section>
+
+    <section class="panel user-panel">
+      <div>
+        <span class="panel-label">用户信息</span>
+        <h2 id="userEmail">加载中...</h2>
+      </div>
+      <div class="danger-zone">
+        <button id="deleteAccountButton" type="button" class="danger-button">注销账户</button>
+        <p>注销后您的邮箱将不会再收到通知消息。</p>
+      </div>
+    </section>
+
+    <section class="panel preferences-panel">
+      <div class="panel-heading">
+        <div>
+          <span class="panel-label">订阅偏好</span>
+          <h2>选择想收到的板块</h2>
+        </div>
+        <button id="savePreferencesButton" type="button" class="primary-button">保存偏好</button>
+      </div>
+      <div id="sectionGrid" class="section-grid"></div>
+    </section>
+  </main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card">
+      <button type="button" class="modal-close" aria-label="关闭">×</button>
+      <h3 id="modalTitle">提示</h3>
+      <p id="modalMessage"></p>
+      <button type="button" class="primary-button modal-confirm">确定</button>
+    </div>
+  </div>
+  <script src="{% static 'notice_app/app.js' %}"></script>
+</body>
+</html>

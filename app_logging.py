@@ -6,7 +6,7 @@ import sys
 import config
 
 
-SOURCE_LOGGER_PREFIXES = ("scrap_section_", "sources.")
+SOURCE_LOGGER_PREFIXES = ("scrape_section_", "sources.")
 
 
 # 配置全局日志输出规则。

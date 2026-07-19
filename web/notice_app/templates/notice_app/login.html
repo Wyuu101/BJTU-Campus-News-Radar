@@ -1,0 +1,103 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BJTU Campus News Radar</title>
+  <link rel="stylesheet" href="{% static 'notice_app/styles.css' %}">
+</head>
+<body class="page page-login">
+  <main class="login-shell">
+    <section class="intro-panel">
+      <div class="intro-block">
+        <p class="eyebrow">BJTU Campus News Radar</p>
+        <h1>校园新事雷达</h1>
+        <p class="lead">面向北交大校内同学的公益信息索引服务，自动发现校园各处官网的通知性动态，及时整合并推送到邮箱，让你不再错过每一条重要通知、每一场有趣的活动。祝您生活愉快🎈😊</p>
+      </div>
+    </section>
+
+    <section class="preview-panel">
+      <div class="preview-heading">
+        <span class="panel-label">效果展览</span>
+      </div>
+      <div class="preview-carousel" aria-label="效果预览图片轮播">
+        <button id="previewPrev" type="button" class="carousel-arrow carousel-arrow-left" aria-label="上一张">‹</button>
+        <div class="preview-window">
+          <div id="previewTrack" class="preview-track"></div>
+        </div>
+        <button id="previewNext" type="button" class="carousel-arrow carousel-arrow-right" aria-label="下一张">›</button>
+      </div>
+      <p id="previewCaption" class="preview-caption"></p>
+      <div id="previewDots" class="preview-dots" aria-label="当前展示图片"></div>
+    </section>
+
+    <aside class="login-panel">
+      <form id="loginForm" class="auth-card">
+        <div>
+          <h2>添加用于接收消息的邮箱</h2>
+          <p class="form-note">新邮箱会自动注册并进入个性化设置。</p>
+        </div>
+
+        <label>
+          <span>邮箱地址</span>
+          <input id="emailInput" type="email" autocomplete="email" placeholder="name@example.com" required>
+        </label>
+
+        <label>
+          <span>图形验证码</span>
+          <div class="inline-field">
+            <input id="captchaInput" type="text" inputmode="numeric" placeholder="算一下" required>
+            <button id="captchaButton" type="button" class="ghost-button"></button>
+          </div>
+        </label>
+
+        <label>
+          <span>邮箱验证码</span>
+          <div class="inline-field">
+            <input id="codeInput" type="text" inputmode="numeric" maxlength="8" placeholder="8 位数字" required>
+            <button id="sendCodeButton" type="button" class="ghost-button">发送</button>
+          </div>
+        </label>
+
+        <button type="submit" class="primary-button">进入个性化设置</button>
+        <label class="privacy-consent">
+          <input id="privacyConsentInput" type="checkbox">
+          <span>
+            我已仔细阅读并同意的
+            <button type="button" class="privacy-link">《隐私条款》</button>
+          </span>
+          <span class="privacy-popover" role="tooltip">本服务仅存储您的邮箱地址和新闻偏好设置，用于向您提供个性化的校内新闻推送，我们不会将您的信息用于任何其他用途，也不会分享给任何第三方。您可以随时登录本系统，修改偏好或注销账户。</span>
+        </label>
+
+        <div class="embedded-analytics">
+          <div class="block-header">
+            <div>
+              <span class="section-dot"></span>
+              <span>近10天已捕获的新事数量</span>
+            </div>
+            <div class="user-card stats-user-card pulse-card">
+              <span class="green-dot"></span>
+              <span>当前用户数</span>
+              <strong id="currentUserCount">0</strong>
+            </div>
+          </div>
+          <svg id="trendChart" class="trend-chart" viewBox="0 0 720 260" role="img" aria-label="近十天新增通知趋势"></svg>
+        </div>
+      </form>
+    </aside>
+
+    <p class="disclaimer">本服务为校内公益信息索引，所有内容版权归原作者所有，用户查看全文需跳转至学校官网，如有侵权或异议，请联系删除（2644489337@qq.com）</p>
+  </main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card">
+      <button type="button" class="modal-close" aria-label="关闭">×</button>
+      <h3 id="modalTitle">提示</h3>
+      <p id="modalMessage"></p>
+      <button type="button" class="primary-button modal-confirm">确定</button>
+    </div>
+  </div>
+  <script src="{% static 'notice_app/app.js' %}"></script>
+</body>
+</html>

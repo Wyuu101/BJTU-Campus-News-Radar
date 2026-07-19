@@ -27,41 +27,55 @@ REQUEST_DELAY_SECONDS = 0.1
 
 # 每个网页板块一个独立脚本；元组格式为：("模块名", "入口函数名")。
 SOURCE_ADAPTERS = [
-    ("scrap_section_01", "crawl"),
-    ("scrap_section_15", "crawl"),
-
+    ("scrape_section_01", "crawl"),
+    ("scrape_section_02", "crawl"),
+    ("scrape_section_03", "crawl"),
+    ("scrape_section_04", "crawl"),
+    ("scrape_section_05", "crawl"),
+    ("scrape_section_06", "crawl"),
+    ("scrape_section_07", "crawl"),
+    ("scrape_section_08", "crawl"),
+    ("scrape_section_09", "crawl"),
+    ("scrape_section_10", "crawl"),
+    ("scrape_section_11", "crawl"),
+    ("scrape_section_12", "crawl"),
+    ("scrape_section_13", "crawl"),
+    ("scrape_section_14", "crawl"),
+    ("scrape_section_15", "crawl"),
 ]
-
-# SMTP 服务器地址，例如 QQ 邮箱可填 "smtp.qq.com"。
-SMTP_HOST = ""
 
 # SMTP 服务器端口；SSL 通常为 465，STARTTLS 通常为 587。
 SMTP_PORT = 465
 
-# SMTP 登录用户名，通常是完整邮箱地址。
-SMTP_USERNAME = ""
-
-# SMTP 登录密码或授权码；多数邮箱服务需要填写授权码而不是网页登录密码。
-SMTP_PASSWORD = ""
-
-# 发件人地址；一般与 SMTP_USERNAME 相同。
-SMTP_FROM = ""
-
-# 收件人地址列表；可填写多个邮箱。
-SMTP_TO = [
-]
-
 # 是否使用 SMTP_SSL；如果改为 False，则使用 STARTTLS。
 SMTP_USE_SSL = True
+
+# SMTP 服务器地址；敏感本地覆盖值应写入 config_local.py。
+SMTP_HOST = ""
+
+# SMTP 登录用户名；敏感本地覆盖值应写入 config_local.py。
+SMTP_USERNAME = ""
+
+# SMTP 登录密码或授权码；敏感本地覆盖值应写入 config_local.py。
+SMTP_PASSWORD = ""
+
+# 发件人地址；敏感本地覆盖值应写入 config_local.py。
+SMTP_FROM = ""
+
+# 默认收件人地址列表；敏感本地覆盖值应写入 config_local.py。
+SMTP_TO = [
+]
 
 
 # 从本地私有配置文件覆盖敏感配置；config_local.py 应加入 .gitignore。
 def _load_local_config() -> None:
+    # 允许没有本地敏感配置时继续使用默认空配置运行。
     try:
         import config_local
     except ModuleNotFoundError:
         return
 
+    # 仅加载大写配置项，避免把模块内部变量暴露到全局配置。
     local_values: dict[str, Any] = {
         key: getattr(config_local, key)
         for key in dir(config_local)
@@ -70,4 +84,5 @@ def _load_local_config() -> None:
     globals().update(local_values)
 
 
+# 加载本地私有配置，覆盖上方默认值。
 _load_local_config()

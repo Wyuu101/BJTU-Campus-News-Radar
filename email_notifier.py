@@ -63,6 +63,32 @@ class EmailNotifier:
         logger.info("邮件发送成功：%s 条通知，%s 个收件人。", len(notices), len(self.recipients))
         return True
 
+    # 发送给单个 Web 订阅用户，供个性化偏好过滤后调用。
+    def send_to_recipient(
+        self,
+        recipient: str,
+        notices: Sequence[QueuedNotice],
+    ) -> bool:
+        if not notices:
+            return True
+
+        if not self.enabled:
+            logger.info("SMTP 未配置，无法发送给 %s 的 %s 条通知。", recipient, len(notices))
+            return False
+
+        if config.SMTP_USE_SSL:
+            with smtplib.SMTP_SSL(config.SMTP_HOST, config.SMTP_PORT) as smtp:
+                smtp.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
+                self._send_message_to_recipient(smtp, recipient, notices)
+        else:
+            with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT) as smtp:
+                smtp.starttls()
+                smtp.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
+                self._send_message_to_recipient(smtp, recipient, notices)
+
+        logger.info("邮件发送成功：%s 条通知，收件人 %s。", len(notices), recipient)
+        return True
+
     # 构造发给单个收件人的邮件对象，避免暴露其他收件人地址。
     def _build_message(
         self,
@@ -104,6 +130,7 @@ class EmailNotifier:
                     [
                         f"   {index}. {notice.title}",
                         f"      日期：{notice.date or '未知'}",
+                        f"      来源：北京交通大学{self._source_name(notice.section)}官网",
                         f"      链接：{notice.url}",
                     ]
                 )
@@ -249,6 +276,7 @@ class EmailNotifier:
         section = self._escape(notice.section)
         date = self._escape(notice.date or "日期未知")
         url = self._escape(notice.url)
+        source = self._escape(f"来源：北京交通大学{self._source_name(notice.section)}官网")
 
         return f"""<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;margin-top:12px;">
             <tr>
@@ -268,6 +296,7 @@ class EmailNotifier:
                 <tr>
                   <td style="padding-top:18px;">
                     <a class="button-link" href="{url}" target="_blank" style="display:inline-block;min-width:96px;padding:11px 18px;border-radius:12px;background:#315fbd;background-image:linear-gradient(135deg,#315fbd,#5b6ee1);color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;text-align:center;box-shadow:0 8px 18px rgba(49,95,189,0.22);">查看通知</a>
+                    <div style="margin-top:14px;color:#98a2b3;font-size:12px;line-height:1.6;">{source}</div>
                   </td>
                 </tr>
               </table>
@@ -278,3 +307,7 @@ class EmailNotifier:
     # 转义 HTML 文本，避免标题或链接中的特殊字符破坏邮件结构。
     def _escape(self, value: str) -> str:
         return html.escape(value, quote=True)
+
+    # 从“来源-板块”形式的 section 中提取官网来源名。
+    def _source_name(self, section: str) -> str:
+        return section.split("-", 1)[0].strip() or section.strip()

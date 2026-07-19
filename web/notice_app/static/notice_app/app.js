@@ -1,0 +1,322 @@
+const csrfToken = () => {
+  const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
+};
+
+const api = async (url, options = {}) => {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": csrfToken(),
+      ...(options.headers || {}),
+    },
+  });
+  const data = await response.json();
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.message || "请求没有成功，请稍后再试。");
+  }
+  return data;
+};
+
+const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  "\"": "&quot;",
+  "'": "&#39;",
+}[char]));
+
+const PREVIEW_SLIDES = [
+  {
+    image: "/static/notice_app/图一.png",
+    alt: "效果图一",
+    caption: "这里预留第一张效果图的说明文字，后续可替换为邮件预览或页面截图。",
+  },
+  {
+    image: "",
+    alt: "效果图二",
+    caption: "这里预留第二张效果图的说明文字，用于介绍订阅偏好或消息推送效果。",
+  },
+  {
+    image: "",
+    alt: "效果图三",
+    caption: "这里预留第三张效果图的说明文字，可展示统计看板或其他公益服务成果。",
+  },
+];
+
+const modal = {
+  el: document.getElementById("modal"),
+  title: document.getElementById("modalTitle"),
+  message: document.getElementById("modalMessage"),
+  confirm: document.querySelector(".modal-confirm"),
+  close: document.querySelector(".modal-close"),
+  onConfirm: null,
+  show(title, message, onConfirm = null) {
+    this.title.textContent = title;
+    this.message.textContent = message;
+    this.onConfirm = onConfirm;
+    this.el.hidden = false;
+  },
+  hide() {
+    this.el.hidden = true;
+    this.onConfirm = null;
+  },
+};
+
+if (modal.el) {
+  modal.confirm.addEventListener("click", () => {
+    const callback = modal.onConfirm;
+    modal.hide();
+    if (callback) callback();
+  });
+  modal.close.addEventListener("click", () => modal.hide());
+}
+
+const drawChart = (points) => {
+  const svg = document.getElementById("trendChart");
+  if (!svg) return;
+  const width = 720;
+  const height = 260;
+  const padding = 34;
+  const max = Math.max(1, ...points.map((point) => point.count));
+  const coords = points.map((point, index) => {
+    const x = padding + (index * (width - padding * 2)) / Math.max(1, points.length - 1);
+    const y = height - padding - (point.count / max) * (height - padding * 2);
+    return { ...point, x, y };
+  });
+  const path = coords.map((point, index) => {
+    if (index === 0) return `M ${point.x} ${point.y}`;
+    const previous = coords[index - 1];
+    const cx = (previous.x + point.x) / 2;
+    return `C ${cx} ${previous.y}, ${cx} ${point.y}, ${point.x} ${point.y}`;
+  }).join(" ");
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#9f6f45"/>
+        <stop offset="100%" stop-color="#4f9d73"/>
+      </linearGradient>
+    </defs>
+    <path d="M ${padding} ${height - padding} H ${width - padding}" stroke="#dfd0c1" stroke-width="2" fill="none"/>
+    <path d="${path}" stroke="url(#lineGradient)" stroke-width="5" stroke-linecap="round" fill="none"/>
+    ${coords.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="5" fill="#fffaf5" stroke="#7c4f2c" stroke-width="3"><title>${point.date}: ${point.count}</title></circle>`).join("")}
+    ${coords.map((point, index) => `<text x="${point.x}" y="${height - 8}" text-anchor="${index === 0 ? "start" : index === coords.length - 1 ? "end" : "middle"}" fill="#8a7a6b" font-size="12">${point.date.slice(5)}</text>`).join("")}
+  `;
+};
+
+const initLogin = async () => {
+  const form = document.getElementById("loginForm");
+  if (!form) return;
+  const captchaButton = document.getElementById("captchaButton");
+  const sendCodeButton = document.getElementById("sendCodeButton");
+  const emailInput = document.getElementById("emailInput");
+  const captchaInput = document.getElementById("captchaInput");
+  const codeInput = document.getElementById("codeInput");
+  const privacyConsentInput = document.getElementById("privacyConsentInput");
+  let cooldownTimer = null;
+
+  const refreshCaptcha = async () => {
+    const data = await api("/api/captcha/", { method: "GET" });
+    captchaButton.textContent = data.question;
+    captchaInput.value = "";
+  };
+
+  const startCooldown = (seconds) => {
+    let remaining = seconds;
+    sendCodeButton.disabled = true;
+    sendCodeButton.textContent = `${remaining}s`;
+    clearInterval(cooldownTimer);
+    cooldownTimer = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(cooldownTimer);
+        sendCodeButton.disabled = false;
+        sendCodeButton.textContent = "发送";
+      } else {
+        sendCodeButton.textContent = `${remaining}s`;
+      }
+    }, 1000);
+  };
+
+  captchaButton.addEventListener("click", refreshCaptcha);
+  sendCodeButton.addEventListener("click", async () => {
+    try {
+      const data = await api("/api/request-code/", {
+        method: "POST",
+        body: JSON.stringify({ email: emailInput.value, captcha: captchaInput.value }),
+      });
+      startCooldown(data.cooldown || 60);
+      modal.show("已寄出", data.message);
+    } catch (error) {
+      refreshCaptcha();
+      modal.show("再看一眼", error.message);
+    }
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (privacyConsentInput && !privacyConsentInput.checked) {
+      modal.show("请先确认", "请阅读《隐私条款》内容，勾选后以同意使用本服务");
+      return;
+    }
+    try {
+      const data = await api("/api/login/", {
+        method: "POST",
+        body: JSON.stringify({ email: emailInput.value, code: codeInput.value }),
+      });
+      window.location.href = data.redirect;
+    } catch (error) {
+      modal.show("进门失败", error.message);
+    }
+  });
+
+  refreshCaptcha();
+};
+
+const initStats = async () => {
+  try {
+    const data = await api("/api/public-stats/", { method: "GET" });
+    drawChart(data.points || []);
+    const userCount = document.getElementById("currentUserCount");
+    if (userCount) userCount.textContent = data.currentUserCount || 0;
+  } catch {
+    drawChart(Array.from({ length: 10 }, (_, index) => ({ date: `--${index + 1}`, count: 0 })));
+  }
+};
+
+const initPreviewCarousel = () => {
+  const track = document.getElementById("previewTrack");
+  const caption = document.getElementById("previewCaption");
+  const dots = document.getElementById("previewDots");
+  const prevButton = document.getElementById("previewPrev");
+  const nextButton = document.getElementById("previewNext");
+  if (!track || !caption || !dots || !prevButton || !nextButton) return;
+
+  let currentIndex = 0;
+  let timer = null;
+  const slides = PREVIEW_SLIDES.length > 0 ? PREVIEW_SLIDES : [{
+    image: "",
+    alt: "效果预览",
+    caption: "这里预留效果图说明文字。",
+  }];
+
+  track.innerHTML = slides.map((slide, index) => {
+    const image = String(slide.image || "").trim();
+    const alt = escapeHtml(slide.alt || `效果图 ${index + 1}`);
+    if (!image) {
+      return `
+        <div class="preview-slide">
+          <div class="preview-placeholder">${alt}</div>
+        </div>
+      `;
+    }
+    return `
+      <div class="preview-slide">
+        <img src="${escapeHtml(image)}" alt="${alt}">
+      </div>
+    `;
+  }).join("");
+
+  dots.innerHTML = slides.map((_slide, index) => (
+    `<button type="button" class="preview-dot" aria-label="第 ${index + 1} 张"></button>`
+  )).join("");
+
+  const dotButtons = [...dots.querySelectorAll(".preview-dot")];
+  const render = () => {
+    track.style.transform = `translateX(-${currentIndex * 100}%)`;
+    caption.textContent = slides[currentIndex].caption || "";
+    dotButtons.forEach((dot, index) => {
+      dot.classList.toggle("active", index === currentIndex);
+    });
+  };
+  const goTo = (index) => {
+    currentIndex = (index + slides.length) % slides.length;
+    render();
+  };
+  const restart = () => {
+    clearInterval(timer);
+    timer = setInterval(() => goTo(currentIndex + 1), 5000);
+  };
+
+  prevButton.addEventListener("click", () => {
+    goTo(currentIndex - 1);
+    restart();
+  });
+  nextButton.addEventListener("click", () => {
+    goTo(currentIndex + 1);
+    restart();
+  });
+  dotButtons.forEach((dot, index) => {
+    dot.addEventListener("click", () => {
+      goTo(index);
+      restart();
+    });
+  });
+
+  render();
+  restart();
+};
+
+const initSettings = async () => {
+  const grid = document.getElementById("sectionGrid");
+  if (!grid) return;
+  const userEmail = document.getElementById("userEmail");
+  const saveButton = document.getElementById("savePreferencesButton");
+  const deleteButton = document.getElementById("deleteAccountButton");
+
+  const [me, sectionsData] = await Promise.all([
+    api("/api/me/", { method: "GET" }),
+    api("/api/sections/", { method: "GET" }),
+  ]);
+  userEmail.textContent = me.email;
+  const selected = new Set(me.preferences || []);
+
+  grid.innerHTML = (sectionsData.sections || []).map((section) => {
+    const checked = selected.size === 0 || selected.has(section);
+    const safeSection = escapeHtml(section);
+    return `
+      <label class="section-card ${checked ? "active" : ""}">
+        <input type="checkbox" value="${safeSection}" ${checked ? "checked" : ""}>
+        <span>${safeSection}</span>
+      </label>
+    `;
+  }).join("");
+
+  grid.addEventListener("change", (event) => {
+    const input = event.target;
+    if (input.matches("input[type='checkbox']")) {
+      input.closest(".section-card").classList.toggle("active", input.checked);
+    }
+  });
+
+  saveButton.addEventListener("click", async () => {
+    const sections = [...grid.querySelectorAll("input[type='checkbox']:checked")].map((input) => input.value);
+    try {
+      const data = await api("/api/preferences/", {
+        method: "POST",
+        body: JSON.stringify({ sections }),
+      });
+      modal.show("保存好了", data.message);
+    } catch (error) {
+      modal.show("保存失败", error.message);
+    }
+  });
+
+  deleteButton.addEventListener("click", () => {
+    modal.show("确认注销吗", "确定后，这个邮箱将停止接收后续通知。", async () => {
+      try {
+        const data = await api("/api/account/", { method: "DELETE" });
+        window.location.href = data.redirect;
+      } catch (error) {
+        modal.show("注销失败", error.message);
+      }
+    });
+  });
+};
+
+initStats();
+initPreviewCarousel();
+initLogin();
+initSettings().catch((error) => modal.show("加载失败", error.message));

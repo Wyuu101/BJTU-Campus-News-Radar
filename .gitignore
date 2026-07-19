@@ -4,4 +4,7 @@
 /data/
 __pycache__/
 config_local.py
+local_settings.py
+web/bjtu_notice_site/local_settings.py
+web/secrets/
 

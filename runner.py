@@ -8,6 +8,7 @@ from app_logging import get_runner_logger, setup_logging
 from data_formats import ResultSummary
 from email_notifier import EmailNotifier
 from storage import NoticeStore
+from web_integration import dispatch_pending_notices, record_new_notice_count
 
 
 logger = get_runner_logger("runner")
@@ -65,7 +66,10 @@ def run_once() -> int:
 
     notifier = EmailNotifier()
     try:
-        sent = notifier.send(pending)
+        record_new_notice_count(all_new_count)
+        sent = dispatch_pending_notices(pending)
+        if sent is None:
+            sent = notifier.send(pending)
     except Exception as error:
         logger.exception("邮件发送失败。")
         store.mark_failed((item.queue_id for item in pending), str(error))
