@@ -41,11 +41,9 @@ _LOGIN_RATE_LIMIT_BY_IP: dict[str, float] = {}
 _CAPTCHA_REFRESH_RATE_LIMIT_BY_IP: dict[str, float] = {}
 
 
-# 渲染登录页；已登录用户直接进入个性化设置页。
+# 渲染登录页；已登录用户也可返回首页查看展示内容或切换邮箱登录。
 @ensure_csrf_cookie
 def login_page(request: HttpRequest):
-    if _current_subscriber(request) is not None:
-        return redirect("/settings/")
     return render(request, "notice_app/login.html")
 
 
