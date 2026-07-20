@@ -48,6 +48,13 @@ const PREVIEW_SLIDES = [
   },
 ];
 
+let registrationUserLimit = 300;
+let registrationClosed = false;
+
+const capacityNoteText = () => (
+  `由于个人财力有限，无法承担购买更多邮件通知服务的费用，本服务将在总用户数达${registrationUserLimit}人后关闭添加邮箱功能。`
+);
+
 const modal = {
   el: document.getElementById("modal"),
   title: document.getElementById("modalTitle"),
@@ -210,9 +217,16 @@ const initLogin = async () => {
 const initStats = async () => {
   try {
     const data = await api("/api/public-stats/", { method: "GET" });
+    registrationUserLimit = Number(data.registrationUserLimit || registrationUserLimit);
+    registrationClosed = Boolean(data.registrationClosed);
     drawChart(data.points || []);
     const userCount = document.getElementById("currentUserCount");
     if (userCount) userCount.textContent = data.currentUserCount || 0;
+    const capacityNote = document.getElementById("capacityNote");
+    if (capacityNote) {
+      capacityNote.textContent = capacityNoteText();
+      capacityNote.classList.toggle("is-closed", registrationClosed);
+    }
   } catch {
     drawChart(Array.from({ length: 10 }, (_, index) => ({ date: `--${index + 1}`, count: 0 })));
   }
@@ -330,7 +344,7 @@ const initSettings = async () => {
         method: "POST",
         body: JSON.stringify({ sections }),
       });
-      modal.show("保存好了", data.message);
+      modal.show("已保存", data.message);
     } catch (error) {
       modal.show("保存失败", error.message);
     }

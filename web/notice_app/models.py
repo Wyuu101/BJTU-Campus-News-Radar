@@ -52,6 +52,9 @@ class EmailVerification(models.Model):
     # 下一次允许发送验证码的时间。
     cooldown_until = models.DateTimeField()
 
+    # 发起验证码请求的客户端 IP，用于异常频次审查。
+    client_ip = models.GenericIPAddressField(null=True, blank=True)
+
     # 当前验证码已尝试校验次数。
     attempts = models.PositiveSmallIntegerField(default=0)
 
@@ -66,7 +69,66 @@ class EmailVerification(models.Model):
         db_table = "web_email_verifications"
         indexes = [
             models.Index(fields=["email_hash", "-created_at"], name="web_ev_hash_created_idx"),
+            models.Index(fields=["client_ip", "-created_at"], name="web_ev_ip_created_idx"),
         ]
+
+
+# 邮箱验证码请求日志表，包含成功发送、限流拦截和黑名单拦截请求。
+class EmailVerificationRequest(models.Model):
+    # 规范化邮箱的 SHA256 哈希；邮箱格式不合法时可为空。
+    email_hash = models.CharField(max_length=64, blank=True, db_index=True)
+
+    # 发起请求的客户端 IP。
+    client_ip = models.GenericIPAddressField(null=True, blank=True, db_index=True)
+
+    # 请求是否被限流或黑名单拦截。
+    was_blocked = models.BooleanField(default=False)
+
+    # 拦截原因，便于后续排查。
+    block_reason = models.CharField(max_length=80, blank=True)
+
+    # 请求发生时间。
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # 数据库表名和 IP 时间窗口查询索引。
+    class Meta:
+        db_table = "web_email_verification_requests"
+        indexes = [
+            models.Index(fields=["client_ip", "-created_at"], name="web_evr_ip_created_idx"),
+        ]
+
+
+# 邮箱验证码 IP 黑名单表，命中后拒绝验证码发送和验证码登录请求。
+class EmailVerificationIpBlacklist(models.Model):
+    # 被封禁的客户端 IP。
+    client_ip = models.GenericIPAddressField(unique=True, db_index=True)
+
+    # 封禁原因。
+    reason = models.CharField(max_length=160, blank=True)
+
+    # 封禁创建时间。
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # 数据库表名和默认排序。
+    class Meta:
+        db_table = "web_email_verification_ip_blacklist"
+        ordering = ["-created_at"]
+
+
+# 登录验证码 SMTP 全局频限状态表，记录触发后的冷却时间。
+class EmailSmtpRateLimitState(models.Model):
+    # 状态名称，当前用于区分登录验证码 SMTP。
+    name = models.CharField(max_length=40, unique=True)
+
+    # 冷却截止时间；为空或已过期时表示未处于冷却。
+    cooldown_until = models.DateTimeField(null=True, blank=True)
+
+    # 记录最近更新时间。
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # 数据库表名。
+    class Meta:
+        db_table = "web_email_smtp_rate_limit_state"
 
 
 # 每日新增通知统计表，供首页趋势图读取。

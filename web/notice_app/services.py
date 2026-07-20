@@ -18,7 +18,14 @@ from data_formats import NoticeRecord
 from email_notifier import EmailNotifier
 from source_registry import discover_sections
 from web.notice_app.crypto import decrypt_email, email_hash, encrypt_email, normalize_email
-from web.notice_app.models import DailyMetric, EmailVerification, Subscriber
+from web.notice_app.models import (
+    DailyMetric,
+    EmailSmtpRateLimitState,
+    EmailVerification,
+    EmailVerificationIpBlacklist,
+    EmailVerificationRequest,
+    Subscriber,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +38,16 @@ class MailDispatchSummary:
     success_count: int = 0
     failure_count: int = 0
     failures: list[tuple[str, str]] = field(default_factory=list)
+
+
+# 登录验证码 SMTP 全局频限状态名称。
+EMAIL_SMTP_RATE_LIMIT_STATE_NAME = "login_verification"
+
+# 用户数量达到上限后的统一提示。
+REGISTRATION_CLOSED_MESSAGE = (
+    "由于作者个人财力有限，无法承担购买更多邮件通知服务的费用，"
+    "本服务的当前用户数已达上限，已不再接收更多邮箱用户，诚挚感谢您的光临与理解！"
+)
 
 
 # 返回当前项目中可展示给用户的去重板块名。
@@ -86,11 +103,95 @@ def get_effective_preferences(subscriber: Subscriber) -> list[str]:
     return [section for section in available if section in selected]
 
 
+# 记录验证码请求并检查 IP 是否已被封禁或需要新加入黑名单。
+def record_login_code_request(email: str, client_ip: str | None) -> tuple[bool, str]:
+    # 规范化邮箱后仅保存哈希，避免请求日志中出现明文邮箱。
+    normalized = normalize_email(email) if email else ""
+    request_log = EmailVerificationRequest.objects.create(
+        email_hash=email_hash(normalized) if normalized else "",
+        client_ip=client_ip or None,
+    )
+
+    # 未启用 IP 黑名单时只记录请求，不执行封禁判断。
+    if not config.ENABLE_LOGIN_IP_BLACKLIST:
+        return True, ""
+
+    # 已在黑名单中的 IP 直接拒绝后续验证码发送和登录校验。
+    if is_login_code_ip_blacklisted(client_ip):
+        request_log.was_blocked = True
+        request_log.block_reason = "ip_blacklisted"
+        request_log.save(update_fields=["was_blocked", "block_reason"])
+        return False, "当前请求人数过多，请稍后"
+
+    # 只有全局冷却期内才进行单 IP 高频审查，降低正常流量误伤。
+    if not _is_email_smtp_global_cooling_down():
+        return True, ""
+
+    # 统计冷却期内该 IP 最近窗口的请求总量，包括已被拦截的请求。
+    window_start = timezone.now() - timedelta(seconds=config.EMAIL_SMTP_IP_BAN_WINDOW_SECONDS)
+    recent_request_count = EmailVerificationRequest.objects.filter(
+        client_ip=client_ip or None,
+        created_at__gte=window_start,
+    ).count()
+    if client_ip and recent_request_count > config.EMAIL_SMTP_IP_BAN_THRESHOLD:
+        EmailVerificationIpBlacklist.objects.get_or_create(
+            client_ip=client_ip,
+            defaults={"reason": "login_code_request_rate_exceeded"},
+        )
+        request_log.was_blocked = True
+        request_log.block_reason = "ip_rate_exceeded"
+        request_log.save(update_fields=["was_blocked", "block_reason"])
+        return False, "当前请求人数过多，请稍后"
+
+    return True, ""
+
+
+# 判断验证码请求 IP 是否处于黑名单。
+def is_login_code_ip_blacklisted(client_ip: str | None) -> bool:
+    if not config.ENABLE_LOGIN_IP_BLACKLIST:
+        return False
+    if not client_ip:
+        return False
+    return EmailVerificationIpBlacklist.objects.filter(client_ip=client_ip).exists()
+
+
+# 判断当前邮箱是否允许继续注册或登录。
+def can_accept_email_for_login(email: str) -> tuple[bool, str]:
+    normalized = normalize_email(email)
+    current_active_count = Subscriber.objects.filter(is_active=True).count()
+    if current_active_count < config.REGISTRATION_USER_LIMIT:
+        return True, ""
+
+    # 已存在且仍激活的用户不占用新增名额，应允许继续登录维护偏好。
+    existing_active = Subscriber.objects.filter(
+        email_hash=email_hash(normalized),
+        is_active=True,
+    ).exists()
+    if existing_active:
+        return True, ""
+
+    return False, REGISTRATION_CLOSED_MESSAGE
+
+
 # 创建邮箱验证码记录并发送验证码邮件。
-def request_login_code(email: str) -> tuple[bool, str, int]:
+def request_login_code(email: str, client_ip: str | None = None) -> tuple[bool, str, int]:
     # 规范化邮箱并读取当前时间。
     normalized = normalize_email(email)
     now = timezone.now()
+
+    # 用户数达到上限时，不再给新邮箱发送验证码。
+    registration_allowed, registration_message = can_accept_email_for_login(normalized)
+    if not registration_allowed:
+        return False, registration_message, 0
+
+    # 黑名单 IP 不允许继续触发验证码发送。
+    if is_login_code_ip_blacklisted(client_ip):
+        return False, "当前请求人数过多，请稍后", config.EMAIL_SMTP_GLOBAL_COOLDOWN_SECONDS
+
+    # 登录验证码 SMTP 进入全局频限冷却时，不再继续消耗发件额度。
+    allowed, cooldown_seconds = _check_email_smtp_global_rate_limit(now)
+    if not allowed:
+        return False, "当前请求人数过多，请稍后", cooldown_seconds
 
     # 冷却时间未结束时拒绝重复发送。
     last_code = EmailVerification.objects.filter(email_hash=email_hash(normalized)).order_by("-created_at").first()
@@ -108,6 +209,7 @@ def request_login_code(email: str) -> tuple[bool, str, int]:
         code_hash=_hash_code(code),
         expires_at=now + timedelta(seconds=settings.EMAIL_CODE_TTL_SECONDS),
         cooldown_until=now + timedelta(seconds=settings.EMAIL_CODE_COOLDOWN_SECONDS),
+        client_ip=client_ip or None,
     )
 
     # 发送验证码邮件；SMTP 未配置时函数内部会安全跳过。
@@ -120,6 +222,12 @@ def verify_login_code(email: str, code: str) -> tuple[bool, str, Subscriber | No
     # 规范化邮箱并查找最新未使用验证码。
     normalized = normalize_email(email)
     now = timezone.now()
+
+    # 用户数达到上限时，新邮箱不可继续创建或恢复账户。
+    registration_allowed, registration_message = can_accept_email_for_login(normalized)
+    if not registration_allowed:
+        return False, registration_message, None
+
     verification = EmailVerification.objects.filter(
         email_hash=email_hash(normalized),
         used_at__isnull=True,
@@ -154,6 +262,34 @@ def verify_login_code(email: str, code: str) -> tuple[bool, str, Subscriber | No
     subscriber.last_login_at = now
     subscriber.save(update_fields=["last_login_at", "updated_at"])
     return True, "登录成功。", subscriber
+
+
+# 检查登录验证码 SMTP 是否超过全局发送频限。
+def _check_email_smtp_global_rate_limit(now) -> tuple[bool, int]:
+    state, _created = EmailSmtpRateLimitState.objects.get_or_create(
+        name=EMAIL_SMTP_RATE_LIMIT_STATE_NAME,
+    )
+
+    # 冷却尚未结束时，直接拒绝新的验证码发送。
+    if state.cooldown_until and state.cooldown_until > now:
+        return False, max(1, int((state.cooldown_until - now).total_seconds()))
+
+    # 统计最近一分钟真实发送的验证码数量。
+    window_start = now - timedelta(seconds=60)
+    sent_count = EmailVerification.objects.filter(created_at__gte=window_start).count()
+    if sent_count < config.EMAIL_SMTP_MAX_SENDS_PER_MINUTE:
+        return True, 0
+
+    # 达到阈值后进入全局冷却期。
+    state.cooldown_until = now + timedelta(seconds=config.EMAIL_SMTP_GLOBAL_COOLDOWN_SECONDS)
+    state.save(update_fields=["cooldown_until", "updated_at"])
+    return False, config.EMAIL_SMTP_GLOBAL_COOLDOWN_SECONDS
+
+
+# 判断登录验证码 SMTP 是否处于全局冷却期。
+def _is_email_smtp_global_cooling_down() -> bool:
+    state = EmailSmtpRateLimitState.objects.filter(name=EMAIL_SMTP_RATE_LIMIT_STATE_NAME).first()
+    return bool(state and state.cooldown_until and state.cooldown_until > timezone.now())
 
 
 # 保存用户订阅偏好，只接受后端存在的板块名。
@@ -207,10 +343,13 @@ def get_public_stats(days: int = 10) -> dict[str, object]:
         current = start_date + timedelta(days=offset)
         points.append({"date": current.isoformat(), "count": existing.get(current, 0)})
 
-    # 返回趋势点和当前激活用户数。
+    # 返回趋势点、当前激活用户数和新增邮箱上限。
+    current_user_count = Subscriber.objects.filter(is_active=True).count()
     return {
         "points": points,
-        "currentUserCount": Subscriber.objects.filter(is_active=True).count(),
+        "currentUserCount": current_user_count,
+        "registrationUserLimit": config.REGISTRATION_USER_LIMIT,
+        "registrationClosed": current_user_count >= config.REGISTRATION_USER_LIMIT,
     }
 
 
@@ -223,6 +362,7 @@ def dispatch_pending_notices(notices: Sequence[NoticeRecord]) -> MailDispatchSum
     # 初始化邮件通知器，并读取当前激活订阅用户。
     notifier = EmailNotifier()
     active_subscribers = Subscriber.objects.filter(is_active=True)
+    deliveries: list[tuple[str, list[NoticeRecord]]] = []
 
     # 为每个用户解密邮箱并按其订阅板块过滤通知。
     for subscriber in active_subscribers:
@@ -241,19 +381,14 @@ def dispatch_pending_notices(notices: Sequence[NoticeRecord]) -> MailDispatchSum
             summary.success_count += 1
             continue
 
-        try:
-            sent = notifier.send_to_recipient(email, target_notices)
-        except Exception as error:
-            summary.failure_count += 1
-            summary.failures.append((email, _summarize_error(error)))
-            logger.debug("订阅邮件发送异常：%s", email, exc_info=error)
-            continue
+        deliveries.append((email, target_notices))
 
-        if sent:
-            summary.success_count += 1
-        else:
-            summary.failure_count += 1
-            summary.failures.append((email, "邮件发送失败"))
+    # 所有目标收件人共用一次 SMTP 会话发送，避免大量重复登录。
+    failures = notifier.send_to_recipients(deliveries)
+    failed_emails = {email for email, _reason in failures}
+    summary.success_count += len(deliveries) - len(failed_emails)
+    summary.failure_count += len(failures)
+    summary.failures.extend(failures)
 
     return summary
 

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import html
 import smtplib
+import time
 from collections import defaultdict
+from contextlib import contextmanager
 from email.message import EmailMessage
 from smtplib import SMTP, SMTP_SSL
-from typing import Sequence
+from typing import Iterator, Sequence
 
 import config
 from app_logging import get_runner_logger
@@ -20,16 +22,22 @@ EMAIL_WIDTH_PX = 640
 class EmailNotifier:
     """邮件通知器。
 
-    未配置 SMTP 时不发送邮件，由 runner 记录失败并返回非零退出码。
+    未配置每日通知 SMTP 时不发送邮件，由 runner 记录失败并返回非零退出码。
     """
 
-    # 根据 SMTP 配置判断邮件通知器是否可用。
+    # 根据每日通知 SMTP 配置判断邮件通知器是否可用。
     def __init__(self) -> None:
+        self.smtp_host = config.NOTIFICATION_SMTP_HOST
+        self.smtp_port = config.NOTIFICATION_SMTP_PORT
+        self.smtp_use_ssl = config.NOTIFICATION_SMTP_USE_SSL
+        self.smtp_username = config.NOTIFICATION_SMTP_USERNAME
+        self.smtp_password = config.NOTIFICATION_SMTP_PASSWORD
+        self.smtp_from = config.NOTIFICATION_SMTP_FROM
         self.enabled = bool(
-            config.SMTP_HOST
-            and config.SMTP_FROM
-            and config.SMTP_USERNAME
-            and config.SMTP_PASSWORD
+            self.smtp_host
+            and self.smtp_from
+            and self.smtp_username
+            and self.smtp_password
         )
 
     # 发送给单个 Web 订阅用户，供个性化偏好过滤后调用。
@@ -42,20 +50,43 @@ class EmailNotifier:
             return True
 
         if not self.enabled:
-            logger.debug("SMTP 未配置，无法发送给 %s 的 %s 条通知。", recipient, len(notices))
+            logger.debug("每日通知 SMTP 未配置，无法发送给 %s 的 %s 条通知。", recipient, len(notices))
             return False
 
-        if config.SMTP_USE_SSL:
-            with smtplib.SMTP_SSL(config.SMTP_HOST, config.SMTP_PORT) as smtp:
-                smtp.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
-                self._send_message_to_recipient(smtp, recipient, notices)
-        else:
-            with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT) as smtp:
-                smtp.starttls()
-                smtp.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
-                self._send_message_to_recipient(smtp, recipient, notices)
-
+        self._send_message(self._build_message(recipient, notices), recipient)
         return True
+
+    # 在一次 SMTP 会话中批量发送每日通知，降低重复登录和服务商风控风险。
+    def send_to_recipients(
+        self,
+        deliveries: Sequence[tuple[str, Sequence[NoticeRecord]]],
+    ) -> list[tuple[str, str]]:
+        active_deliveries = [(recipient, notices) for recipient, notices in deliveries if notices]
+        if not active_deliveries:
+            return []
+
+        if not self.enabled:
+            logger.debug("每日通知 SMTP 未配置，无法发送 %s 封通知邮件。", len(active_deliveries))
+            return [(recipient, "每日通知 SMTP 未配置") for recipient, _notices in active_deliveries]
+
+        failures: list[tuple[str, str]] = []
+        try:
+            with self._smtp_session() as smtp:
+                last_sent_at = 0.0
+                for recipient, notices in active_deliveries:
+                    last_sent_at = self._wait_for_send_slot(last_sent_at)
+                    try:
+                        message = self._build_message(recipient, notices)
+                        smtp.send_message(message, from_addr=self.smtp_from, to_addrs=[recipient])
+                    except Exception as error:
+                        failures.append((recipient, self._summarize_error(error)))
+                        logger.debug("每日通知邮件发送失败：%s", recipient, exc_info=error)
+        except Exception as error:
+            reason = self._summarize_error(error)
+            logger.debug("每日通知 SMTP 会话建立失败。", exc_info=error)
+            return [(recipient, reason) for recipient, _notices in active_deliveries]
+
+        return failures
 
     # 发送 runner 异常报告给管理员邮箱。
     def send_admin_report(
@@ -73,7 +104,7 @@ class EmailNotifier:
             return False
 
         if not self.enabled:
-            logger.warning("SMTP 未配置，异常报告未发送。")
+            logger.warning("每日通知 SMTP 未配置，异常报告未发送。")
             return False
 
         message = self._build_admin_report_message(
@@ -86,15 +117,7 @@ class EmailNotifier:
             mail_failures=mail_failures,
         )
 
-        if config.SMTP_USE_SSL:
-            with smtplib.SMTP_SSL(config.SMTP_HOST, config.SMTP_PORT) as smtp:
-                smtp.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
-                smtp.send_message(message, from_addr=config.SMTP_FROM, to_addrs=[config.ADMIN_EMAIL])
-        else:
-            with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT) as smtp:
-                smtp.starttls()
-                smtp.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
-                smtp.send_message(message, from_addr=config.SMTP_FROM, to_addrs=[config.ADMIN_EMAIL])
+        self._send_message(message, config.ADMIN_EMAIL)
         return True
 
     # 构造发给单个收件人的邮件对象，避免暴露其他收件人地址。
@@ -105,7 +128,7 @@ class EmailNotifier:
     ) -> EmailMessage:
         message = EmailMessage()
         message["Subject"] = f"叮咚~已为您捕捉到 {len(notices)} 条新通知"
-        message["From"] = config.SMTP_FROM
+        message["From"] = self.smtp_from
         message["To"] = recipient
         message.set_content(self._build_plain_text_body(notices))
         message.add_alternative(
@@ -128,7 +151,7 @@ class EmailNotifier:
     ) -> EmailMessage:
         message = EmailMessage()
         message["Subject"] = "BJTU Campus News Radar 异常报告"
-        message["From"] = config.SMTP_FROM
+        message["From"] = self.smtp_from
         message["To"] = recipient
         message.set_content(
             self._build_admin_report_text(
@@ -153,15 +176,46 @@ class EmailNotifier:
         )
         return message
 
-    # 将一封只包含单个收件人的邮件发送给指定邮箱。
-    def _send_message_to_recipient(
+    # 使用每日通知 SMTP 将邮件发送给指定邮箱。
+    def _send_message(
         self,
-        smtp: SMTP | SMTP_SSL,
+        message: EmailMessage,
         recipient: str,
-        notices: Sequence[NoticeRecord],
     ) -> None:
-        message = self._build_message(recipient, notices)
-        smtp.send_message(message, from_addr=config.SMTP_FROM, to_addrs=[recipient])
+        with self._smtp_session() as smtp:
+            smtp.send_message(message, from_addr=self.smtp_from, to_addrs=[recipient])
+
+    # 建立并登录每日通知 SMTP 会话。
+    @contextmanager
+    def _smtp_session(self) -> Iterator[SMTP | SMTP_SSL]:
+        if self.smtp_use_ssl:
+            with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port) as smtp:
+                smtp.login(self.smtp_username, self.smtp_password)
+                yield smtp
+        else:
+            with smtplib.SMTP(self.smtp_host, self.smtp_port) as smtp:
+                smtp.starttls()
+                smtp.login(self.smtp_username, self.smtp_password)
+                yield smtp
+
+    # 按每日通知 SMTP 频率限制等待下一个发送窗口。
+    def _wait_for_send_slot(self, last_sent_at: float) -> float:
+        if last_sent_at <= 0:
+            return time.monotonic()
+
+        max_sends_per_minute = min(149, max(1, int(config.NOTIFICATION_SMTP_MAX_SENDS_PER_MINUTE)))
+        interval_seconds = 60.0 / max_sends_per_minute
+        elapsed = time.monotonic() - last_sent_at
+        if elapsed < interval_seconds:
+            time.sleep(interval_seconds - elapsed)
+        return time.monotonic()
+
+    # 将异常压缩为适合运行日志展示的短原因。
+    def _summarize_error(self, error: Exception) -> str:
+        message = str(error).strip()
+        if not message:
+            return error.__class__.__name__
+        return message[:120]
 
     # 构造纯文本邮件正文。
     def _build_plain_text_body(

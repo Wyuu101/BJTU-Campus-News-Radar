@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 import time
@@ -14,10 +15,13 @@ from web.notice_app.crypto import decrypt_email
 from web.notice_app.captcha_utils import create_captcha_payload, validate_captcha_answer
 from web.notice_app.models import Subscriber
 from web.notice_app.services import (
+    can_accept_email_for_login,
     deactivate_subscriber,
     get_effective_preferences,
     get_public_stats,
     get_section_names,
+    is_login_code_ip_blacklisted,
+    record_login_code_request,
     request_login_code,
     update_preferences,
     verify_login_code,
@@ -82,6 +86,17 @@ def api_request_code(request: HttpRequest) -> JsonResponse:
     if not EMAIL_RE.match(email):
         return JsonResponse({"ok": False, "message": "邮箱格式有点不对。"}, status=400)
 
+    # 达到人数上限时，新邮箱不再进入验证码发送流程。
+    registration_allowed, registration_message = can_accept_email_for_login(email)
+    if not registration_allowed:
+        return JsonResponse({"ok": False, "message": registration_message}, status=429)
+
+    # 记录本次验证码请求 IP，并在黑名单命中或冷却期高频请求时拒绝。
+    client_ip = _client_ip(request)
+    ip_allowed, ip_message = record_login_code_request(email, client_ip)
+    if not ip_allowed:
+        return JsonResponse({"ok": False, "message": ip_message}, status=429)
+
     # 图形验证码不匹配时拒绝发送，并直接返回下一张验证码。
     if not validate_captcha_answer(captcha_key, captcha):
         captcha_payload = create_captcha_payload()
@@ -95,7 +110,7 @@ def api_request_code(request: HttpRequest) -> JsonResponse:
         )
 
     # 调用服务层创建验证码记录并按冷却规则发送邮件。
-    ok, message, cooldown = request_login_code(email)
+    ok, message, cooldown = request_login_code(email, client_ip=client_ip)
     status = 200 if ok else 429
     return JsonResponse({"ok": ok, "message": message, "cooldown": cooldown}, status=status)
 
@@ -111,6 +126,10 @@ def api_login(request: HttpRequest) -> JsonResponse:
             status=429,
         )
 
+    # 黑名单 IP 不允许继续使用验证码登录接口。
+    if is_login_code_ip_blacklisted(_client_ip(request)):
+        return JsonResponse({"ok": False, "message": "当前请求人数过多，请稍后"}, status=429)
+
     # 读取邮箱和 8 位验证码。
     payload = _json_payload(request)
     email = str(payload.get("email", "")).strip()
@@ -119,6 +138,11 @@ def api_login(request: HttpRequest) -> JsonResponse:
     # 基础参数校验失败时直接返回，不进入验证码匹配逻辑。
     if not EMAIL_RE.match(email) or not re.fullmatch(r"\d{8}", code):
         return JsonResponse({"ok": False, "message": "请输入邮箱和 8 位数字验证码。"}, status=400)
+
+    # 达到人数上限时，新邮箱不再进入账户创建或恢复流程。
+    registration_allowed, registration_message = can_accept_email_for_login(email)
+    if not registration_allowed:
+        return JsonResponse({"ok": False, "message": registration_message}, status=429)
 
     # 校验验证码，成功时自动创建或恢复订阅用户。
     ok, message, subscriber = verify_login_code(email, code)
@@ -225,8 +249,18 @@ def _json_payload(request: HttpRequest) -> dict[str, object]:
 def _client_ip(request: HttpRequest) -> str | None:
     forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
     if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR")
+        return _validated_ip(forwarded.split(",")[0].strip())
+    return _validated_ip(request.META.get("REMOTE_ADDR"))
+
+
+# 校验并规范化客户端 IP，非法代理头直接忽略。
+def _validated_ip(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return str(ipaddress.ip_address(value))
+    except ValueError:
+        return None
 
 
 # 检查登录验证码校验接口是否触发 1 秒频率限制。
