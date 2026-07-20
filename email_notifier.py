@@ -9,7 +9,7 @@ from typing import Sequence
 
 import config
 from app_logging import get_runner_logger
-from data_formats import QueuedNotice
+from data_formats import NoticeRecord
 
 
 logger = get_runner_logger("runner.email")
@@ -20,54 +20,23 @@ EMAIL_WIDTH_PX = 640
 class EmailNotifier:
     """邮件通知器。
 
-    未配置 SMTP 时不发送邮件，只把待发送数量留给 runner 日志提示，避免 cron 中静默失败。
+    未配置 SMTP 时不发送邮件，由 runner 记录失败并返回非零退出码。
     """
 
     # 根据 SMTP 配置判断邮件通知器是否可用。
     def __init__(self) -> None:
-        self.recipients = [item.strip() for item in config.SMTP_TO if item.strip()]
         self.enabled = bool(
             config.SMTP_HOST
             and config.SMTP_FROM
-            and self.recipients
             and config.SMTP_USERNAME
             and config.SMTP_PASSWORD
         )
-
-    # 发送一批待通知项，支持未来按用户订阅板块过滤。
-    def send(
-        self,
-        notices: Sequence[QueuedNotice],
-        subscribed_sections: Sequence[str] | None = None,
-    ) -> bool:
-        notices = self._filter_notices_for_subscription(notices, subscribed_sections)
-        if not notices:
-            return True
-
-        if not self.enabled:
-            logger.info("SMTP 未配置，保留 %s 条通知在待发送队列。", len(notices))
-            return False
-
-        if config.SMTP_USE_SSL:
-            with smtplib.SMTP_SSL(config.SMTP_HOST, config.SMTP_PORT) as smtp:
-                smtp.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
-                for recipient in self.recipients:
-                    self._send_message_to_recipient(smtp, recipient, notices)
-        else:
-            with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT) as smtp:
-                smtp.starttls()
-                smtp.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
-                for recipient in self.recipients:
-                    self._send_message_to_recipient(smtp, recipient, notices)
-
-        logger.info("邮件发送成功：%s 条通知，%s 个收件人。", len(notices), len(self.recipients))
-        return True
 
     # 发送给单个 Web 订阅用户，供个性化偏好过滤后调用。
     def send_to_recipient(
         self,
         recipient: str,
-        notices: Sequence[QueuedNotice],
+        notices: Sequence[NoticeRecord],
     ) -> bool:
         if not notices:
             return True
@@ -93,7 +62,7 @@ class EmailNotifier:
     def _build_message(
         self,
         recipient: str,
-        notices: Sequence[QueuedNotice],
+        notices: Sequence[NoticeRecord],
     ) -> EmailMessage:
         message = EmailMessage()
         message["Subject"] = f"叮咚~已为您捕捉到 {len(notices)} 条新通知"
@@ -111,7 +80,7 @@ class EmailNotifier:
         self,
         smtp: SMTP | SMTP_SSL,
         recipient: str,
-        notices: Sequence[QueuedNotice],
+        notices: Sequence[NoticeRecord],
     ) -> None:
         message = self._build_message(recipient, notices)
         smtp.send_message(message, from_addr=config.SMTP_FROM, to_addrs=[recipient])
@@ -119,7 +88,7 @@ class EmailNotifier:
     # 构造纯文本邮件正文。
     def _build_plain_text_body(
         self,
-        notices: Sequence[QueuedNotice],
+        notices: Sequence[NoticeRecord],
     ) -> str:
         notices_by_section = self._group_notices_by_section(notices)
         lines = [f"叮咚~已为您捕捉到 {len(notices)} 条新通知：", ""]
@@ -140,7 +109,7 @@ class EmailNotifier:
     # 构造 HTML 邮件正文。
     def _build_html_body(
         self,
-        notices: Sequence[QueuedNotice],
+        notices: Sequence[NoticeRecord],
     ) -> str:
         notices_by_section = self._group_notices_by_section(notices)
         section_blocks = "\n".join(
@@ -205,7 +174,7 @@ class EmailNotifier:
           <tr>
             <td style="padding:22px 10px 0;text-align:center;color:#98a2b3;font-size:12px;line-height:1.7;">
               <div style="border-top:1px solid rgba(152,162,179,0.22);padding-top:18px;">
-                此邮件由 BJTU Notice Monitor 自动发送。请勿直接回复。
+                此邮件由 Campus News Radar 自动发送。请勿直接回复。
               </div>
             </td>
           </tr>
@@ -216,23 +185,12 @@ class EmailNotifier:
 </body>
 </html>"""
 
-    # 根据用户订阅板块过滤待发送通知。
-    def _filter_notices_for_subscription(
-        self,
-        notices: Sequence[QueuedNotice],
-        subscribed_sections: Sequence[str] | None,
-    ) -> list[QueuedNotice]:
-        if not subscribed_sections:
-            return list(notices)
-        section_set = {section.strip() for section in subscribed_sections if section.strip()}
-        return [notice for notice in notices if notice.section in section_set]
-
     # 按板块分组通知。
     def _group_notices_by_section(
         self,
-        notices: Sequence[QueuedNotice],
-    ) -> dict[str, list[QueuedNotice]]:
-        grouped: dict[str, list[QueuedNotice]] = defaultdict(list)
+        notices: Sequence[NoticeRecord],
+    ) -> dict[str, list[NoticeRecord]]:
+        grouped: dict[str, list[NoticeRecord]] = defaultdict(list)
         for notice in notices:
             grouped[notice.section].append(notice)
         return dict(grouped)
@@ -241,7 +199,7 @@ class EmailNotifier:
     def _build_section_block(
         self,
         section: str,
-        notices: Sequence[QueuedNotice],
+        notices: Sequence[NoticeRecord],
     ) -> str:
         section_text = self._escape(section)
         count_text = self._escape(f"{len(notices)} 条新消息")
@@ -271,7 +229,7 @@ class EmailNotifier:
           </tr>"""
 
     # 构造单条通知的 HTML 卡片。
-    def _build_notice_card(self, notice: QueuedNotice, index: int) -> str:
+    def _build_notice_card(self, notice: NoticeRecord, index: int) -> str:
         title = self._escape(notice.title)
         section = self._escape(notice.section)
         date = self._escape(notice.date or "日期未知")

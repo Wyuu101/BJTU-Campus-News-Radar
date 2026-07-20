@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent
 # 本项目运行时数据目录，SQLite 数据库会放在这里。
 DATA_DIR = BASE_DIR / "data"
 
-# SQLite 数据库文件路径，用于保存已发现通知和待发送邮件队列。
+# SQLite 数据库文件路径，用于保存已发现通知和 Web 多用户数据。
 DB_PATH = DATA_DIR / "notice_monitor.sqlite3"
 
 # Runner 日志等级；建议保持 INFO，调试总流程时可改成 DEBUG。
@@ -28,7 +28,7 @@ REQUEST_DELAY_SECONDS = 0.1
 # 每个网页板块一个独立脚本；元组格式为：("模块导入路径", "入口函数名")。
 SOURCE_ADAPTERS = [
     ("scrape_scripts.scrape_section_01", "crawl"),
-    # ("scrape_scripts.scrape_section_02", "crawl"),
+    ("scrape_scripts.scrape_section_02", "crawl"),
     # ("scrape_scripts.scrape_section_03", "crawl"),
     # ("scrape_scripts.scrape_section_04", "crawl"),
     # ("scrape_scripts.scrape_section_05", "crawl"),
@@ -61,10 +61,6 @@ SMTP_PASSWORD = ""
 
 # 发件人地址；敏感本地覆盖值应写入 config_local.py。
 SMTP_FROM = ""
-
-# 默认收件人地址列表；敏感本地覆盖值应写入 config_local.py。
-SMTP_TO = [
-]
 
 
 # 从本地私有配置文件覆盖敏感配置；config_local.py 应加入 .gitignore。

@@ -12,8 +12,3 @@ SMTP_PASSWORD = "replace-with-email-auth-code"
 
 # 发件人地址；一般与 SMTP_USERNAME 相同。
 SMTP_FROM = "sender@example.com"
-
-# 默认收件人地址列表；Web 多用户模式下通常不需要在这里配置真实用户。
-SMTP_TO = [
-    "receiver@example.com",
-]

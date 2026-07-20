@@ -18,10 +18,9 @@ class ResultSummary:
 
 
 @dataclass(frozen=True, slots=True)
-class QueuedNotice:
-    """等待邮件通知的队列项。"""
+class NoticeRecord:
+    """已入库且可用于邮件通知的通知记录。"""
 
-    queue_id: int
     notice_id: int
     section: str
     title: str

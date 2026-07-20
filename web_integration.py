@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Sequence
 
-from data_formats import QueuedNotice
+from data_formats import NoticeRecord
 
 
 # 初始化 Django 环境；未安装 Django 时允许 runner 继续走旧逻辑。
@@ -32,8 +32,8 @@ def record_new_notice_count(count: int) -> bool:
     return True
 
 
-# 使用 Web 用户订阅偏好发送通知；不可用时返回 None 让 runner 回退旧逻辑。
-def dispatch_pending_notices(notices: Sequence[QueuedNotice]) -> bool | None:
+# 使用 Web 用户订阅偏好发送通知；不可用时返回 None 让 runner 判定失败。
+def dispatch_pending_notices(notices: Sequence[NoticeRecord]) -> bool | None:
     if not setup_django():
         return None
 

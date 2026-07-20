@@ -12,7 +12,7 @@ from django.db.models import F
 from django.utils import timezone
 
 import config
-from data_formats import QueuedNotice
+from data_formats import NoticeRecord
 from email_notifier import EmailNotifier
 from source_registry import discover_sections
 from web.notice_app.crypto import decrypt_email, email_hash, encrypt_email, normalize_email
@@ -171,8 +171,6 @@ def record_new_notice_count(count: int) -> None:
         date=timezone.localdate(),
         defaults={"new_notice_count": 0},
     )
-    print(timezone.localdate())
-
     # 用数据库自增表达式避免并发运行 runner 时覆盖计数。
     DailyMetric.objects.filter(pk=metric.pk).update(new_notice_count=F("new_notice_count") + count)
 
@@ -202,22 +200,23 @@ def get_public_stats(days: int = 10) -> dict[str, object]:
     }
 
 
-# 按 Web 用户订阅偏好逐个过滤并发送待通知队列。
-def dispatch_pending_notices(notices: Sequence[QueuedNotice]) -> bool:
+# 按 Web 用户订阅偏好和启用板块逐个过滤并发送本轮新增通知。
+def dispatch_pending_notices(notices: Sequence[NoticeRecord]) -> bool:
     if not notices:
         return True
 
     # 初始化邮件通知器，并读取当前激活订阅用户。
     notifier = EmailNotifier()
     active_subscribers = Subscriber.objects.filter(is_active=True)
-    sent_any = False
     had_target = False
+    all_targets_sent = True
 
     # 为每个用户解密邮箱并按其订阅板块过滤通知。
     for subscriber in active_subscribers:
         try:
             email = decrypt_email(subscriber.encrypted_email)
         except Exception:
+            all_targets_sent = False
             continue
 
         # 只发送用户勾选板块对应的新通知。
@@ -226,22 +225,18 @@ def dispatch_pending_notices(notices: Sequence[QueuedNotice]) -> bool:
         if not target_notices:
             continue
         had_target = True
-        sent_any = notifier.send_to_recipient(email, target_notices) or sent_any
-
-    # 至少有一个用户发送成功时，本轮队列可标记已发送。
-    if sent_any:
-        return True
+        all_targets_sent = notifier.send_to_recipient(email, target_notices) and all_targets_sent
 
     # 有用户但没有任何用户命中订阅时，也视为本轮无需发送。
     if active_subscribers.exists() and not had_target:
         return True
 
-    # 有目标用户但全部发送失败时返回 False，保留队列重试。
+    # 有目标用户时，必须全部发送成功才视为本轮完成。
     if active_subscribers.exists():
-        return False
+        return all_targets_sent
 
-    # 没有 Web 用户时，回退到 config.SMTP_TO 的旧发送逻辑。
-    return notifier.send(notices)
+    # 没有 Web 用户时没有可发送目标，直接视为无需发送。
+    return True
 
 
 # 对验证码做 SHA256 哈希，数据库不保存明文验证码。
