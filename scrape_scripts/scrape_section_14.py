@@ -108,9 +108,9 @@ def parse_page(
     return results
 
 
-# 当前板块的独立抓取入口，内部可自由决定是否翻页。
+# 当前板块的独立扫描入口，内部可自由决定是否翻页。
 def crawl(max_pages: int = MAX_PAGES) -> list[ResultSummary] | None:
-    """连续抓取前 max_pages 页，供 runner 调用。"""
+    """连续扫描前 max_pages 页，供 runner 调用。"""
 
     all_results: list[ResultSummary] = []
 
@@ -120,7 +120,7 @@ def crawl(max_pages: int = MAX_PAGES) -> list[ResultSummary] | None:
         for page in range(1, max_pages + 1):
             page_results = parse_page(session=session, page=page)
             if page_results is None:
-                logger.debug("爬取中止：第 %s 页失败。", page)
+                logger.debug("扫描中止：第 %s 页失败。", page)
                 return None
 
             if not page_results:

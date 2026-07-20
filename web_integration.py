@@ -33,7 +33,7 @@ def record_new_notice_count(count: int) -> bool:
 
 
 # 使用 Web 用户订阅偏好发送通知；不可用时返回 None 让 runner 判定失败。
-def dispatch_pending_notices(notices: Sequence[NoticeRecord]) -> bool | None:
+def dispatch_pending_notices(notices: Sequence[NoticeRecord]) -> object | None:
     if not setup_django():
         return None
 

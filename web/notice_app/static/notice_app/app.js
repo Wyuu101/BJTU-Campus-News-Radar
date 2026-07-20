@@ -178,7 +178,7 @@ const initLogin = async () => {
         }),
       });
       startCooldown(data.cooldown || 60);
-      modal.show("已寄出", data.message);
+      modal.show("已发送", data.message);
     } catch (error) {
       if (error.data && error.data.captcha) {
         applyCaptcha(error.data.captcha);
@@ -200,7 +200,7 @@ const initLogin = async () => {
       });
       window.location.href = data.redirect;
     } catch (error) {
-      modal.show("进门失败", error.message);
+      modal.show("验证失败", error.message);
     }
   });
 
@@ -337,7 +337,7 @@ const initSettings = async () => {
   });
 
   deleteButton.addEventListener("click", () => {
-    modal.show("确认注销吗", "确定后，这个邮箱将停止接收后续通知。", async () => {
+    modal.show("确认注销吗", "该邮箱将停止接收新消息提醒", async () => {
       try {
         const data = await api("/api/account/", { method: "DELETE" });
         window.location.href = data.redirect;

@@ -12,3 +12,6 @@ SMTP_PASSWORD = "replace-with-email-auth-code"
 
 # 发件人地址；一般与 SMTP_USERNAME 相同。
 SMTP_FROM = "sender@example.com"
+
+# 管理员邮箱，用于接收 runner 异常报告。
+ADMIN_EMAIL = "admin@example.com"

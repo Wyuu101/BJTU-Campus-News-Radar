@@ -42,7 +42,7 @@ class EmailNotifier:
             return True
 
         if not self.enabled:
-            logger.info("SMTP 未配置，无法发送给 %s 的 %s 条通知。", recipient, len(notices))
+            logger.debug("SMTP 未配置，无法发送给 %s 的 %s 条通知。", recipient, len(notices))
             return False
 
         if config.SMTP_USE_SSL:
@@ -55,7 +55,46 @@ class EmailNotifier:
                 smtp.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
                 self._send_message_to_recipient(smtp, recipient, notices)
 
-        logger.info("邮件发送成功：%s 条通知，收件人 %s。", len(notices), recipient)
+        return True
+
+    # 发送 runner 异常报告给管理员邮箱。
+    def send_admin_report(
+        self,
+        *,
+        scan_success_count: int,
+        scan_failure_count: int,
+        scan_failures: Sequence[str],
+        mail_success_count: int,
+        mail_failure_count: int,
+        mail_failures: Sequence[tuple[str, str]],
+    ) -> bool:
+        if not config.ADMIN_EMAIL:
+            logger.warning("管理员邮箱未配置，异常报告未发送。")
+            return False
+
+        if not self.enabled:
+            logger.warning("SMTP 未配置，异常报告未发送。")
+            return False
+
+        message = self._build_admin_report_message(
+            recipient=config.ADMIN_EMAIL,
+            scan_success_count=scan_success_count,
+            scan_failure_count=scan_failure_count,
+            scan_failures=scan_failures,
+            mail_success_count=mail_success_count,
+            mail_failure_count=mail_failure_count,
+            mail_failures=mail_failures,
+        )
+
+        if config.SMTP_USE_SSL:
+            with smtplib.SMTP_SSL(config.SMTP_HOST, config.SMTP_PORT) as smtp:
+                smtp.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
+                smtp.send_message(message, from_addr=config.SMTP_FROM, to_addrs=[config.ADMIN_EMAIL])
+        else:
+            with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT) as smtp:
+                smtp.starttls()
+                smtp.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
+                smtp.send_message(message, from_addr=config.SMTP_FROM, to_addrs=[config.ADMIN_EMAIL])
         return True
 
     # 构造发给单个收件人的邮件对象，避免暴露其他收件人地址。
@@ -71,6 +110,45 @@ class EmailNotifier:
         message.set_content(self._build_plain_text_body(notices))
         message.add_alternative(
             self._build_html_body(notices),
+            subtype="html",
+        )
+        return message
+
+    # 构造管理员异常报告邮件对象。
+    def _build_admin_report_message(
+        self,
+        *,
+        recipient: str,
+        scan_success_count: int,
+        scan_failure_count: int,
+        scan_failures: Sequence[str],
+        mail_success_count: int,
+        mail_failure_count: int,
+        mail_failures: Sequence[tuple[str, str]],
+    ) -> EmailMessage:
+        message = EmailMessage()
+        message["Subject"] = "BJTU Campus News Radar 异常报告"
+        message["From"] = config.SMTP_FROM
+        message["To"] = recipient
+        message.set_content(
+            self._build_admin_report_text(
+                scan_success_count=scan_success_count,
+                scan_failure_count=scan_failure_count,
+                scan_failures=scan_failures,
+                mail_success_count=mail_success_count,
+                mail_failure_count=mail_failure_count,
+                mail_failures=mail_failures,
+            )
+        )
+        message.add_alternative(
+            self._build_admin_report_html(
+                scan_success_count=scan_success_count,
+                scan_failure_count=scan_failure_count,
+                scan_failures=scan_failures,
+                mail_success_count=mail_success_count,
+                mail_failure_count=mail_failure_count,
+                mail_failures=mail_failures,
+            ),
             subtype="html",
         )
         return message
@@ -104,6 +182,27 @@ class EmailNotifier:
                     ]
                 )
             lines.append("")
+        return "\n".join(lines)
+
+    # 构造管理员异常报告纯文本正文。
+    def _build_admin_report_text(
+        self,
+        *,
+        scan_success_count: int,
+        scan_failure_count: int,
+        scan_failures: Sequence[str],
+        mail_success_count: int,
+        mail_failure_count: int,
+        mail_failures: Sequence[tuple[str, str]],
+    ) -> str:
+        lines = [
+            "BJTU Campus News Radar 异常报告",
+            "",
+            f"雷达扫描：{scan_success_count} 成功，{scan_failure_count} 异常。",
+        ]
+        lines.extend(f"- {item}" for item in scan_failures)
+        lines.extend(["", f"邮件通知：{mail_success_count} 成功，{mail_failure_count} 异常。"])
+        lines.extend(f"- {email}: {reason}" for email, reason in mail_failures)
         return "\n".join(lines)
 
     # 构造 HTML 邮件正文。
@@ -174,7 +273,7 @@ class EmailNotifier:
           <tr>
             <td style="padding:22px 10px 0;text-align:center;color:#98a2b3;font-size:12px;line-height:1.7;">
               <div style="border-top:1px solid rgba(152,162,179,0.22);padding-top:18px;">
-                此邮件由 Campus News Radar 自动发送。请勿直接回复。
+                此邮件由 BJTU Campus News Radar 自动发送。请勿直接回复。
               </div>
             </td>
           </tr>
@@ -184,6 +283,67 @@ class EmailNotifier:
   </table>
 </body>
 </html>"""
+
+    # 构造管理员异常报告 HTML 正文。
+    def _build_admin_report_html(
+        self,
+        *,
+        scan_success_count: int,
+        scan_failure_count: int,
+        scan_failures: Sequence[str],
+        mail_success_count: int,
+        mail_failure_count: int,
+        mail_failures: Sequence[tuple[str, str]],
+    ) -> str:
+        scan_items = self._build_admin_report_items(scan_failures)
+        mail_items = self._build_admin_report_items(
+            [f"{email}: {reason}" for email, reason in mail_failures]
+        )
+        return f"""<!doctype html>
+<html lang="zh-CN">
+<body style="margin:0;padding:0;background:#f7f3ee;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#292524;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="padding:34px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="{EMAIL_WIDTH_PX}" cellspacing="0" cellpadding="0" border="0" style="max-width:{EMAIL_WIDTH_PX}px;width:100%;border-collapse:separate;border-spacing:0;">
+          <tr>
+            <td style="padding:28px;border-radius:22px;background:#fffaf5;border:1px solid #eadfd3;box-shadow:0 22px 52px rgba(120,94,70,.14);">
+              <h1 style="margin:0;font-size:24px;line-height:1.3;color:#2f261f;">BJTU Campus News Radar 异常报告</h1>
+              <p style="margin:10px 0 0;color:#7b6d61;font-size:14px;line-height:1.7;">本轮运行检测到异常，请及时查看。</p>
+            </td>
+          </tr>
+          <tr><td style="height:16px;font-size:1px;line-height:16px;">&nbsp;</td></tr>
+          <tr>
+            <td style="padding:24px;border-radius:18px;background:#fffaf5;border:1px solid #eadfd3;">
+              <h2 style="margin:0 0 12px;font-size:18px;color:#2f261f;">爬虫异常情况</h2>
+              <p style="margin:0 0 14px;color:#7b6d61;">扫描完毕，{scan_success_count}成功，{scan_failure_count}异常。</p>
+              {scan_items}
+            </td>
+          </tr>
+          <tr><td style="height:16px;font-size:1px;line-height:16px;">&nbsp;</td></tr>
+          <tr>
+            <td style="padding:24px;border-radius:18px;background:#fffaf5;border:1px solid #eadfd3;">
+              <h2 style="margin:0 0 12px;font-size:18px;color:#2f261f;">邮件异常情况</h2>
+              <p style="margin:0 0 14px;color:#7b6d61;">邮件通知任务完成，成功{mail_success_count}，异常{mail_failure_count}</p>
+              {mail_items}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+    # 构造管理员报告中的异常条目列表。
+    def _build_admin_report_items(self, items: Sequence[str]) -> str:
+        if not items:
+            return '<p style="margin:0;color:#8a7a6b;font-size:14px;">无异常。</p>'
+        content = "".join(
+            f'<li style="margin:0 0 8px;color:#7a4f2d;font-size:14px;line-height:1.6;">{self._escape(item)}</li>'
+            for item in items
+        )
+        return f'<ul style="margin:0;padding-left:20px;">{content}</ul>'
 
     # 按板块分组通知。
     def _group_notices_by_section(

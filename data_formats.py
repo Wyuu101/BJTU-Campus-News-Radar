@@ -7,7 +7,7 @@ from dataclasses import dataclass
 class ResultSummary:
     """Source Adapter 返回给 Runner 的统一通知摘要格式。"""
 
-    # 内容所属板块，例如“电信学院-学院新闻”
+    # 内容所属板块，例如“电信学院-学院动态”
     section: str
     # 内容标题
     title: str

@@ -42,9 +42,9 @@ class NoticeStore:
                 """
             )
 
-    # 写入抓取结果，过滤旧通知，并返回本轮新增通知。
+    # 写入扫描结果，过滤旧通知，并返回本轮新增通知。
     def add_notices(self, notices: Iterable[ResultSummary]) -> list[NoticeRecord]:
-        """写入本次抓取结果，并返回本轮首次发现的通知。"""
+        """写入本次扫描结果，并返回本轮首次发现的通知。"""
 
         new_records: list[NoticeRecord] = []
         with self._connect() as conn:

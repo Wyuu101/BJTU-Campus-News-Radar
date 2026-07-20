@@ -17,7 +17,7 @@ DB_PATH = DATA_DIR / "notice_monitor.sqlite3"
 RUNNER_LOG_LEVEL = "INFO"
 
 # 是否开启各网页板块脚本的调试输出；False 时只保留 runner 的进度日志。
-DEBUG_SOURCES = True
+DEBUG_SOURCES = False
 
 # 单次 HTTP 请求超时时间，单位秒。
 REQUEST_TIMEOUT_SECONDS = 15.0
@@ -29,7 +29,7 @@ REQUEST_DELAY_SECONDS = 0.1
 SOURCE_ADAPTERS = [
     ("scrape_scripts.scrape_section_01", "crawl"),
     ("scrape_scripts.scrape_section_02", "crawl"),
-    # ("scrape_scripts.scrape_section_03", "crawl"),
+    ("scrape_scripts.scrape_section_03", "crawl"),
     # ("scrape_scripts.scrape_section_04", "crawl"),
     # ("scrape_scripts.scrape_section_05", "crawl"),
     # ("scrape_scripts.scrape_section_06", "crawl"),
@@ -61,6 +61,9 @@ SMTP_PASSWORD = ""
 
 # 发件人地址；敏感本地覆盖值应写入 config_local.py。
 SMTP_FROM = ""
+
+# 管理员邮箱；敏感本地覆盖值应写入 config_local.py。
+ADMIN_EMAIL = ""
 
 
 # 从本地私有配置文件覆盖敏感配置；config_local.py 应加入 .gitignore。

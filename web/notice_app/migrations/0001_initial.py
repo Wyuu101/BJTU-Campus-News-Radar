@@ -31,7 +31,6 @@ class Migration(migrations.Migration):
                 ("cooldown_until", models.DateTimeField()),
                 ("attempts", models.PositiveSmallIntegerField(default=0)),
                 ("used_at", models.DateTimeField(blank=True, null=True)),
-                ("client_ip", models.GenericIPAddressField(blank=True, null=True)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
             ],
             options={"db_table": "web_email_verifications"},

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import random
 import smtplib
+from dataclasses import dataclass, field
 from datetime import timedelta
 from email.message import EmailMessage
 from typing import Sequence
@@ -17,6 +19,18 @@ from email_notifier import EmailNotifier
 from source_registry import discover_sections
 from web.notice_app.crypto import decrypt_email, email_hash, encrypt_email, normalize_email
 from web.notice_app.models import DailyMetric, EmailVerification, Subscriber
+
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MailDispatchSummary:
+    """记录本轮订阅邮件分发的统计结果。"""
+
+    success_count: int = 0
+    failure_count: int = 0
+    failures: list[tuple[str, str]] = field(default_factory=list)
 
 
 # 返回当前项目中可展示给用户的去重板块名。
@@ -201,42 +215,55 @@ def get_public_stats(days: int = 10) -> dict[str, object]:
 
 
 # 按 Web 用户订阅偏好和启用板块逐个过滤并发送本轮新增通知。
-def dispatch_pending_notices(notices: Sequence[NoticeRecord]) -> bool:
+def dispatch_pending_notices(notices: Sequence[NoticeRecord]) -> MailDispatchSummary:
+    summary = MailDispatchSummary()
     if not notices:
-        return True
+        return summary
 
     # 初始化邮件通知器，并读取当前激活订阅用户。
     notifier = EmailNotifier()
     active_subscribers = Subscriber.objects.filter(is_active=True)
-    had_target = False
-    all_targets_sent = True
 
     # 为每个用户解密邮箱并按其订阅板块过滤通知。
     for subscriber in active_subscribers:
         try:
             email = decrypt_email(subscriber.encrypted_email)
-        except Exception:
-            all_targets_sent = False
+        except Exception as error:
+            summary.failure_count += 1
+            summary.failures.append(("<邮箱解密失败>", "邮箱解密失败"))
+            logger.debug("订阅用户邮箱解密失败：subscriber_id=%s", subscriber.pk, exc_info=error)
             continue
 
         # 只发送用户勾选板块对应的新通知。
         selected_sections = get_effective_preferences(subscriber)
         target_notices = [notice for notice in notices if notice.section in selected_sections]
         if not target_notices:
+            summary.success_count += 1
             continue
-        had_target = True
-        all_targets_sent = notifier.send_to_recipient(email, target_notices) and all_targets_sent
 
-    # 有用户但没有任何用户命中订阅时，也视为本轮无需发送。
-    if active_subscribers.exists() and not had_target:
-        return True
+        try:
+            sent = notifier.send_to_recipient(email, target_notices)
+        except Exception as error:
+            summary.failure_count += 1
+            summary.failures.append((email, _summarize_error(error)))
+            logger.debug("订阅邮件发送异常：%s", email, exc_info=error)
+            continue
 
-    # 有目标用户时，必须全部发送成功才视为本轮完成。
-    if active_subscribers.exists():
-        return all_targets_sent
+        if sent:
+            summary.success_count += 1
+        else:
+            summary.failure_count += 1
+            summary.failures.append((email, "邮件发送失败"))
 
-    # 没有 Web 用户时没有可发送目标，直接视为无需发送。
-    return True
+    return summary
+
+
+# 将异常压缩为适合 INFO 级日志展示的短原因。
+def _summarize_error(error: Exception) -> str:
+    message = str(error).strip()
+    if not message:
+        return error.__class__.__name__
+    return message[:120]
 
 
 # 对验证码做 SHA256 哈希，数据库不保存明文验证码。
@@ -252,7 +279,7 @@ def _send_verification_email(recipient: str, code: str) -> None:
 
     # 构造同时包含纯文本和 HTML 的验证码邮件。
     message = EmailMessage()
-    message["Subject"] = "BJTU Notice Monitor 登录验证码"
+    message["Subject"] = "BJTU Campus News Radar 登录验证码"
     message["From"] = config.SMTP_FROM
     message["To"] = recipient
     message.set_content(
