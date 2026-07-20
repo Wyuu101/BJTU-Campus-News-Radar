@@ -57,6 +57,11 @@ def settings_page(request: HttpRequest):
     return render(request, "notice_app/settings.html")
 
 
+# 渲染打赏支持页。
+def donate_page(request: HttpRequest):
+    return render(request, "notice_app/donate.html")
+
+
 # 生成图形验证码图片信息。
 @require_GET
 def api_captcha(request: HttpRequest) -> JsonResponse:

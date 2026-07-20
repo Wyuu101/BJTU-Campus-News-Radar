@@ -32,7 +32,7 @@ const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({
 
 const PREVIEW_SLIDES = [
   {
-    image: "/static/notice_app/图一.png",
+    image: "/static/notice_app/concept_images/concept_img1.png",
     alt: "效果图一",
     caption: "这里预留第一张效果图的说明文字，后续可替换为邮件预览或页面截图。",
   },

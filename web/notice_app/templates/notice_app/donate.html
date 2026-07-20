@@ -1,0 +1,23 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>打赏支持 - BJTU Campus News Radar</title>
+  <link rel="stylesheet" href="{% static 'notice_app/styles.css' %}">
+</head>
+<body class="page page-donate">
+  <main class="donate-shell">
+    <section class="donate-card">
+      <a href="/" class="donate-back" aria-label="返回首页">‹</a>
+      <p class="eyebrow">BJTU Campus News Radar</p>
+      <h1>打赏支持</h1>
+      <div class="qr-frame">
+        <img src="/static/notice_app/qr_images/qrcode.png" alt="收款码" class="donate-qr">
+      </div>
+      <p class="donate-thanks">感谢打赏！所有的赏金将被用于继续维持和完善本公益项目</p>
+    </section>
+  </main>
+</body>
+</html>
