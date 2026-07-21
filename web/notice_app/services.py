@@ -8,8 +8,10 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from email.message import EmailMessage
 from typing import Sequence
+from urllib.parse import quote
 
 from django.conf import settings
+from django.core import signing
 from django.db.models import F
 from django.utils import timezone
 
@@ -48,6 +50,9 @@ REGISTRATION_CLOSED_MESSAGE = (
     "由于作者个人财力有限，无法承担购买更多邮件通知服务的费用，"
     "本服务的当前用户数已达上限，已不再接收更多邮箱用户，诚挚感谢您的光临与理解！"
 )
+
+# 邮件退订链接签名盐，独立于其他 Django 签名用途。
+UNSUBSCRIBE_TOKEN_SALT = "notice_app.unsubscribe"
 
 
 # 返回当前项目中可展示给用户的去重板块名。
@@ -311,6 +316,38 @@ def deactivate_subscriber(subscriber: Subscriber) -> None:
     subscriber.save(update_fields=["is_active", "preferences", "updated_at"])
 
 
+# 生成免登录退订令牌，用于通知邮件中的专属退订链接。
+def build_unsubscribe_token(subscriber: Subscriber) -> str:
+    payload = {"subscriber_id": subscriber.pk, "email_hash": subscriber.email_hash}
+    return signing.dumps(payload, salt=UNSUBSCRIBE_TOKEN_SALT)
+
+
+# 根据退订令牌软注销订阅用户，令牌无效时返回失败。
+def unsubscribe_by_token(token: str) -> tuple[bool, str]:
+    try:
+        payload = signing.loads(token, salt=UNSUBSCRIBE_TOKEN_SALT)
+    except signing.BadSignature:
+        return False, "退订链接无效或已被修改。"
+    if not isinstance(payload, dict):
+        return False, "退订链接格式不正确。"
+
+    subscriber_id = payload.get("subscriber_id")
+    token_email_hash = payload.get("email_hash")
+    subscriber = Subscriber.objects.filter(pk=subscriber_id, email_hash=token_email_hash).first()
+    if subscriber is None:
+        return False, "没有找到对应的邮箱订阅。"
+
+    deactivate_subscriber(subscriber)
+    return True, "退订成功。"
+
+
+# 拼接完整退订链接，供后台邮件发送流程使用。
+def build_unsubscribe_url(subscriber: Subscriber) -> str:
+    base_url = str(config.SITE_BASE_URL).rstrip("/")
+    token = quote(build_unsubscribe_token(subscriber), safe="")
+    return f"{base_url}/unsubscribe/?token={token}"
+
+
 # 将 runner 本轮新增通知数累加到当天统计。
 def record_new_notice_count(count: int) -> None:
     if count <= 0:
@@ -362,7 +399,7 @@ def dispatch_pending_notices(notices: Sequence[NoticeRecord]) -> MailDispatchSum
     # 初始化邮件通知器，并读取当前激活订阅用户。
     notifier = EmailNotifier()
     active_subscribers = Subscriber.objects.filter(is_active=True)
-    deliveries: list[tuple[str, list[NoticeRecord]]] = []
+    deliveries: list[tuple[str, list[NoticeRecord], str]] = []
 
     # 为每个用户解密邮箱并按其订阅板块过滤通知。
     for subscriber in active_subscribers:
@@ -381,7 +418,7 @@ def dispatch_pending_notices(notices: Sequence[NoticeRecord]) -> MailDispatchSum
             summary.success_count += 1
             continue
 
-        deliveries.append((email, target_notices))
+        deliveries.append((email, target_notices, build_unsubscribe_url(subscriber)))
 
     # 所有目标收件人共用一次 SMTP 会话发送，避免大量重复登录。
     failures = notifier.send_to_recipients(deliveries)

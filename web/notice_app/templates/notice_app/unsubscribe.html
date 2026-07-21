@@ -1,0 +1,39 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>退订确认 - BJTU Campus News Radar</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="{% static 'notice_app/styles.css' %}">
+</head>
+<body class="page page-unsubscribe">
+  <main class="unsubscribe-shell">
+    <section id="unsubscribeSuccess" class="unsubscribe-success" hidden>
+      <div class="unsubscribe-icon-frame">
+        <img src="" alt="退订成功" class="unsubscribe-icon">
+      </div>
+      <h1>退订成功</h1>
+      <p>您的邮箱将不再接收任何与BJTU Campus News Rader相关的通知</p>
+    </section>
+  </main>
+
+  <div id="unsubscribeModal" class="modal">
+    <div class="modal-card">
+      <button type="button" id="unsubscribeClose" class="modal-close" aria-label="关闭">×</button>
+      <h3 id="unsubscribeTitle">确认注销吗</h3>
+      <p id="unsubscribeMessage">该邮箱将停止接收新消息提醒</p>
+      <div class="modal-actions">
+        <button type="button" id="unsubscribeCancel" class="ghost-button">取消</button>
+        <button type="button" id="unsubscribeConfirm" class="primary-button">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.UNSUBSCRIBE_TOKEN = "{{ unsubscribe_token|escapejs }}";
+  </script>
+  <script src="{% static 'notice_app/app.js' %}"></script>
+</body>
+</html>

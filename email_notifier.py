@@ -45,6 +45,7 @@ class EmailNotifier:
         self,
         recipient: str,
         notices: Sequence[NoticeRecord],
+        unsubscribe_url: str = "",
     ) -> bool:
         if not notices:
             return True
@@ -53,30 +54,37 @@ class EmailNotifier:
             logger.debug("每日通知 SMTP 未配置，无法发送给 %s 的 %s 条通知。", recipient, len(notices))
             return False
 
-        self._send_message(self._build_message(recipient, notices), recipient)
+        self._send_message(self._build_message(recipient, notices, unsubscribe_url), recipient)
         return True
 
     # 在一次 SMTP 会话中批量发送每日通知，降低重复登录和服务商风控风险。
     def send_to_recipients(
         self,
-        deliveries: Sequence[tuple[str, Sequence[NoticeRecord]]],
+        deliveries: Sequence[tuple[str, Sequence[NoticeRecord], str]],
     ) -> list[tuple[str, str]]:
-        active_deliveries = [(recipient, notices) for recipient, notices in deliveries if notices]
+        active_deliveries = [
+            (recipient, notices, unsubscribe_url)
+            for recipient, notices, unsubscribe_url in deliveries
+            if notices
+        ]
         if not active_deliveries:
             return []
 
         if not self.enabled:
             logger.debug("每日通知 SMTP 未配置，无法发送 %s 封通知邮件。", len(active_deliveries))
-            return [(recipient, "每日通知 SMTP 未配置") for recipient, _notices in active_deliveries]
+            return [
+                (recipient, "每日通知 SMTP 未配置")
+                for recipient, _notices, _unsubscribe_url in active_deliveries
+            ]
 
         failures: list[tuple[str, str]] = []
         try:
             with self._smtp_session() as smtp:
                 last_sent_at = 0.0
-                for recipient, notices in active_deliveries:
+                for recipient, notices, unsubscribe_url in active_deliveries:
                     last_sent_at = self._wait_for_send_slot(last_sent_at)
                     try:
-                        message = self._build_message(recipient, notices)
+                        message = self._build_message(recipient, notices, unsubscribe_url)
                         smtp.send_message(message, from_addr=self.smtp_from, to_addrs=[recipient])
                     except Exception as error:
                         failures.append((recipient, self._summarize_error(error)))
@@ -84,7 +92,7 @@ class EmailNotifier:
         except Exception as error:
             reason = self._summarize_error(error)
             logger.debug("每日通知 SMTP 会话建立失败。", exc_info=error)
-            return [(recipient, reason) for recipient, _notices in active_deliveries]
+            return [(recipient, reason) for recipient, _notices, _unsubscribe_url in active_deliveries]
 
         return failures
 
@@ -125,14 +133,15 @@ class EmailNotifier:
         self,
         recipient: str,
         notices: Sequence[NoticeRecord],
+        unsubscribe_url: str = "",
     ) -> EmailMessage:
         message = EmailMessage()
-        message["Subject"] = f"叮咚~已为您捕捉到 {len(notices)} 条新通知"
+        message["Subject"] = f"叮咚~已为您捕捉到 {len(notices)} 条校园新事"
         message["From"] = self.smtp_from
         message["To"] = recipient
-        message.set_content(self._build_plain_text_body(notices))
+        message.set_content(self._build_plain_text_body(notices, unsubscribe_url))
         message.add_alternative(
-            self._build_html_body(notices),
+            self._build_html_body(notices, unsubscribe_url),
             subtype="html",
         )
         return message
@@ -221,9 +230,18 @@ class EmailNotifier:
     def _build_plain_text_body(
         self,
         notices: Sequence[NoticeRecord],
+        unsubscribe_url: str = "",
     ) -> str:
         notices_by_section = self._group_notices_by_section(notices)
-        lines = [f"叮咚~已为您捕捉到 {len(notices)} 条新通知：", ""]
+        lines = [
+            f"叮咚~已为您捕捉到 {len(notices)} 条校园新事：",
+            "此邮件由 BJTU Campus News Rader 自动发送，您可以随时退订服务。",
+        ]
+        if unsubscribe_url:
+            lines.extend([f"退订链接：{unsubscribe_url}", ""])
+        else:
+            lines.append("")
+        lines.extend([f"访问首页：{str(config.SITE_BASE_URL).rstrip('/')}", ""])
         for section, section_notices in notices_by_section.items():
             lines.append(f"[{section}]")
             for index, notice in enumerate(section_notices, start=1):
@@ -263,6 +281,7 @@ class EmailNotifier:
     def _build_html_body(
         self,
         notices: Sequence[NoticeRecord],
+        unsubscribe_url: str = "",
     ) -> str:
         notices_by_section = self._group_notices_by_section(notices)
         section_blocks = "\n".join(
@@ -270,10 +289,14 @@ class EmailNotifier:
             for section, section_notices in notices_by_section.items()
         )
         notice_count = len(notices)
-        section_count = len(notices_by_section)
-        title = self._escape(f"叮咚~已为您捕捉到 {notice_count} 条新通知")
-        subtitle = self._escape(
-            f"我把它们按 {section_count} 个板块分好类了，泡杯咖啡慢慢看也不迟。"
+        title = self._escape(f"叮咚~已为您捕捉到 {notice_count} 条校园新事")
+        site_url = self._escape(str(config.SITE_BASE_URL).rstrip("/"))
+        unsubscribe_link = self._escape(unsubscribe_url)
+        subtitle = (
+            "此邮件由 "
+            f'<a href="{site_url}" target="_blank" style="color:#2f73c8;text-decoration:none;font-weight:700;">BJTU Campus News Rader</a>'
+            " 自动发送，您可以随时"
+            f'<a href="{unsubscribe_link}" target="_blank" style="color:#2f73c8;text-decoration:none;font-weight:700;">退订服务</a>。'
         )
 
         return f"""<!doctype html>
@@ -298,7 +321,7 @@ class EmailNotifier:
 </head>
 <body style="margin:0;padding:0;background:#eef5ff;background-image:linear-gradient(135deg,#eaf2ff 0%,#fff8f1 42%,#f2f0ff 72%,#ecfbf7 100%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#172033;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
-    叮咚~本轮为您捕捉到 {notice_count} 条新通知。
+    叮咚~本轮为您捕捉到 {notice_count} 条校园新事。
   </div>
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;border-collapse:collapse;background:#eef5ff;background-image:radial-gradient(circle at 12% 8%,rgba(99,102,241,0.16) 0,rgba(99,102,241,0) 28%),radial-gradient(circle at 85% 18%,rgba(20,184,166,0.14) 0,rgba(20,184,166,0) 26%),linear-gradient(135deg,#eaf2ff 0%,#fff8f1 42%,#f2f0ff 72%,#ecfbf7 100%);">
     <tr>

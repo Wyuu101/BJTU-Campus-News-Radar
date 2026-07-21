@@ -33,13 +33,13 @@ const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({
 const PREVIEW_SLIDES = [
   {
     image: "/static/notice_app/concept_images/concept_img1.png",
-    alt: "效果图一",
-    caption: "这里预留第一张效果图的说明文字，后续可替换为邮件预览或页面截图。",
+    alt: "轮播图1",
+    caption: "汇总校园各类讯息的链接索引，通过邮件及时提醒您前往官网查看。",
   },
   {
-    image: "",
-    alt: "效果图二",
-    caption: "这里预留第二张效果图的说明文字，用于介绍订阅偏好或消息推送效果。",
+    image: "/static/notice_app/concept_images/concept_img2.png",
+    alt: "轮播图2",
+    caption: "提醒邮件内部页面展示，点击按钮即可跳转至信息源查看。",
   },
   {
     image: "",
@@ -52,7 +52,7 @@ let registrationUserLimit = 300;
 let registrationClosed = false;
 
 const capacityNoteText = () => (
-  `由于个人财力有限，无法承担购买更多邮件通知服务的费用，本服务将在总用户数达${registrationUserLimit}人后关闭添加邮箱功能。`
+  `由于个人财力有限，无法承担购买更多邮件通知服务的费用，本服务将在总用户数达${registrationUserLimit}人后关闭添加邮箱功能。为尽可能服务更多同学，建议大家每人只添加一个常用邮箱即可。`
 );
 
 const modal = {
@@ -309,6 +309,7 @@ const initSettings = async () => {
   const grid = document.getElementById("sectionGrid");
   if (!grid) return;
   const userEmail = document.getElementById("userEmail");
+  const deliveryHint = document.getElementById("deliveryHint");
   const saveButton = document.getElementById("savePreferencesButton");
   const deleteButton = document.getElementById("deleteAccountButton");
 
@@ -317,6 +318,9 @@ const initSettings = async () => {
     api("/api/sections/", { method: "GET" }),
   ]);
   userEmail.textContent = me.email;
+  if (deliveryHint) {
+    deliveryHint.textContent = `如果有校园新事发现，将会在当天的${me.dailyNotificationDisplayTime || "18:30"}左右为您整合消息索引并发送到您的邮箱。`;
+  }
   const selected = new Set(me.preferences || []);
 
   grid.innerHTML = (sectionsData.sections || []).map((section) => {
@@ -362,7 +366,50 @@ const initSettings = async () => {
   });
 };
 
+const initUnsubscribe = () => {
+  const modalEl = document.getElementById("unsubscribeModal");
+  if (!modalEl) return;
+  const confirmButton = document.getElementById("unsubscribeConfirm");
+  const cancelButton = document.getElementById("unsubscribeCancel");
+  const closeButton = document.getElementById("unsubscribeClose");
+  const successPanel = document.getElementById("unsubscribeSuccess");
+  const title = document.getElementById("unsubscribeTitle");
+  const message = document.getElementById("unsubscribeMessage");
+  const token = window.UNSUBSCRIBE_TOKEN || "";
+
+  const closeToHome = () => {
+    window.location.href = "/";
+  };
+
+  const showSuccess = () => {
+    modalEl.hidden = true;
+    successPanel.hidden = false;
+  };
+
+  const showError = (text) => {
+    title.textContent = "退订失败";
+    message.textContent = text;
+    confirmButton.hidden = true;
+    cancelButton.textContent = "返回首页";
+  };
+
+  confirmButton.addEventListener("click", async () => {
+    try {
+      await api("/api/unsubscribe/", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      });
+      showSuccess();
+    } catch (error) {
+      showError(error.message);
+    }
+  });
+  cancelButton.addEventListener("click", closeToHome);
+  closeButton.addEventListener("click", closeToHome);
+};
+
 initStats();
 initPreviewCarousel();
 initLogin();
+initUnsubscribe();
 initSettings().catch((error) => modal.show("加载失败", error.message));

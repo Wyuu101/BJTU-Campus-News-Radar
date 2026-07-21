@@ -80,6 +80,9 @@ ENABLE_LOGIN_IP_BLACKLIST = False
 # 可接收通知的最大活跃用户数；达到上限后不再接收新邮箱。
 REGISTRATION_USER_LIMIT = 300
 
+# 站点根地址，用于 runner 在后台邮件中生成可点击的页面链接；部署后改为正式域名。
+SITE_BASE_URL = "http://127.0.0.1:8000"
+
 # 每日通知 SMTP 服务器端口；用于 runner 发送订阅通知和异常报告。
 NOTIFICATION_SMTP_PORT = 465
 
@@ -100,6 +103,9 @@ NOTIFICATION_SMTP_FROM = ""
 
 # 每日通知 SMTP 每分钟最大发送数量；默认小于 150 次/分钟。
 NOTIFICATION_SMTP_MAX_SENDS_PER_MINUTE = 149
+
+# 每日整合通知预计发送时间，仅用于 Web 页面提示文案展示。
+DAILY_NOTIFICATION_DISPLAY_TIME = "18:30"
 
 # 管理员邮箱；敏感本地覆盖值应写入 config_local.py。
 ADMIN_EMAIL = ""

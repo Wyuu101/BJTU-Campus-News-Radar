@@ -31,6 +31,9 @@ ENABLE_LOGIN_IP_BLACKLIST = False
 # 可接收通知的最大活跃用户数；达到上限后不再接收新邮箱。
 REGISTRATION_USER_LIMIT = 300
 
+# 站点根地址，用于每日通知邮件中的退订链接；部署后改为正式域名。
+SITE_BASE_URL = "https://example.com"
+
 # 每日通知 SMTP 服务器地址。
 NOTIFICATION_SMTP_HOST = "smtp.example.com"
 
@@ -51,6 +54,9 @@ NOTIFICATION_SMTP_FROM = "daily-notice@example.com"
 
 # 每日通知 SMTP 每分钟最大发送数量；默认小于 150 次/分钟。
 NOTIFICATION_SMTP_MAX_SENDS_PER_MINUTE = 149
+
+# 每日整合通知预计发送时间，仅用于 Web 页面提示文案展示。
+DAILY_NOTIFICATION_DISPLAY_TIME = "18:30"
 
 # 管理员邮箱，用于接收 runner 异常报告。
 ADMIN_EMAIL = "admin@example.com"

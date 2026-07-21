@@ -5,8 +5,9 @@ import json
 import re
 import time
 
+import config
 from django.conf import settings
-from django.http import HttpRequest, JsonResponse
+from django.http import FileResponse, Http404, HttpRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -23,6 +24,7 @@ from web.notice_app.services import (
     is_login_code_ip_blacklisted,
     record_login_code_request,
     request_login_code,
+    unsubscribe_by_token,
     update_preferences,
     verify_login_code,
 )
@@ -47,6 +49,14 @@ def login_page(request: HttpRequest):
     return render(request, "notice_app/login.html")
 
 
+# 返回站点 favicon，兼容浏览器默认请求的 /favicon.ico。
+def favicon(request: HttpRequest):
+    favicon_path = settings.WEB_DIR / "favicon.ico"
+    if not favicon_path.exists():
+        raise Http404("favicon.ico not found")
+    return FileResponse(favicon_path.open("rb"), content_type="image/x-icon")
+
+
 # 渲染个性化设置页；未登录用户回到登录页。
 @ensure_csrf_cookie
 def settings_page(request: HttpRequest):
@@ -58,6 +68,12 @@ def settings_page(request: HttpRequest):
 # 渲染打赏支持页。
 def donate_page(request: HttpRequest):
     return render(request, "notice_app/donate.html")
+
+
+# 渲染免登录退订确认页。
+@ensure_csrf_cookie
+def unsubscribe_page(request: HttpRequest):
+    return render(request, "notice_app/unsubscribe.html", {"unsubscribe_token": request.GET.get("token", "")})
 
 
 # 生成图形验证码图片信息。
@@ -178,6 +194,7 @@ def api_me(request: HttpRequest) -> JsonResponse:
             "ok": True,
             "email": decrypt_email(subscriber.encrypted_email),
             "preferences": get_effective_preferences(subscriber),
+            "dailyNotificationDisplayTime": config.DAILY_NOTIFICATION_DISPLAY_TIME,
         }
     )
 
@@ -219,6 +236,19 @@ def api_delete_account(request: HttpRequest) -> JsonResponse:
     deactivate_subscriber(subscriber)
     request.session.flush()
     return JsonResponse({"ok": True, "message": "账户已注销。", "redirect": "/"})
+
+
+# 根据邮件退订令牌注销订阅账户。
+@require_POST
+def api_unsubscribe(request: HttpRequest) -> JsonResponse:
+    payload = _json_payload(request)
+    token = str(payload.get("token", "")).strip()
+    if not token:
+        return JsonResponse({"ok": False, "message": "退订链接缺少必要信息。"}, status=400)
+
+    ok, message = unsubscribe_by_token(token)
+    status = 200 if ok else 400
+    return JsonResponse({"ok": ok, "message": message}, status=status)
 
 
 # 返回首页公共统计数据。

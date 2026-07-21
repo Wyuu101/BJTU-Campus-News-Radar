@@ -8,7 +8,9 @@ from web.notice_app import views
 # 站点 URL 路由表，页面路由和前端调用的 JSON API 都集中在这里。
 urlpatterns = [
     path("", views.login_page, name="login_page"),
+    path("favicon.ico", views.favicon, name="favicon"),
     path("donate/", views.donate_page, name="donate_page"),
+    path("unsubscribe/", views.unsubscribe_page, name="unsubscribe_page"),
     path("settings/", views.settings_page, name="settings_page"),
     path("api/captcha/", views.api_captcha, name="api_captcha"),
     path("api/request-code/", views.api_request_code, name="api_request_code"),
@@ -18,6 +20,7 @@ urlpatterns = [
     path("api/sections/", views.api_sections, name="api_sections"),
     path("api/preferences/", views.api_preferences, name="api_preferences"),
     path("api/account/", views.api_delete_account, name="api_delete_account"),
+    path("api/unsubscribe/", views.api_unsubscribe, name="api_unsubscribe"),
     path("api/public-stats/", views.api_public_stats, name="api_public_stats"),
     path("captcha/", include("captcha.urls")),
 ]
