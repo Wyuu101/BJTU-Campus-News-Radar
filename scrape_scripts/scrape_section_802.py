@@ -7,17 +7,17 @@ import requests
 from bs4 import BeautifulSoup
 
 import config
-from app_logging import get_source_logger, setup_logging
+from app_logging import get_source_logger
 from data_formats import ResultSummary
 
 
 logger = get_source_logger(__name__)
 
-SECTION_ID = "section_01"
-SECTION_NAME = "电信学院-学院新闻"
+SECTION_ID = "section_802"
+SECTION_NAME = "电信学院-学院公告"
 
 BASE_URL = "https://eie.bjtu.edu.cn/cms/item/"
-CATEGORY_ID = 127
+CATEGORY_ID = 129
 MAX_PAGES = 3
 
 HEADERS = {
@@ -70,7 +70,7 @@ def parse_page(
         return []
 
     results: list[ResultSummary] = []
-    for item in news_list.find_all("li", class_="list_li", recursive=False):
+    for item in news_list.find_all("li", class_="list_li_rt", recursive=False):
         result = _parse_list_item(item, response.url)
         if result is not None:
             results.append(result)
@@ -110,7 +110,7 @@ def crawl(max_pages: int = MAX_PAGES) -> list[ResultSummary] | None:
 
 # 从列表页的单个 li 节点中提取统一通知摘要。
 def _parse_list_item(item: BeautifulSoup, base_url: str) -> ResultSummary | None:
-    content = item.find(class_="list_content_con")
+    content = item.find(class_="list_content_rt")
     if content is None:
         return None
 
@@ -146,14 +146,9 @@ def _parse_date(item: BeautifulSoup) -> str | None:
 
 # 允许本脚本单独运行，用于调试当前板块。
 def main() -> None:
-    setup_logging(source_debug=True)
-    results = crawl()
-    if results is None:
-        logger.error("爬虫运行失败。")
-        return
+    from scrape_scripts.debug_runner import run_standalone
 
-    for result in results:
-        logger.info("%s | %s | %s", result.date or "未知", result.title, result.url)
+    run_standalone(globals())
 
 
 if __name__ == "__main__":

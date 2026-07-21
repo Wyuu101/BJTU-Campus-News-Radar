@@ -7,17 +7,16 @@ import requests
 from bs4 import BeautifulSoup
 
 import config
-from app_logging import get_source_logger, setup_logging
+from app_logging import get_source_logger
 from data_formats import ResultSummary
 
 
 logger = get_source_logger(__name__)
 
-SECTION_ID = "section_07"
-SECTION_NAME = "电信学院-国际交流动态"
+SECTION_ID = "section_22"
+SECTION_NAME = "研究生院-博士招生"
 
-BASE_URL = "https://eie.bjtu.edu.cn/cms/item/"
-CATEGORY_ID = 112
+BASE_URL = "https://yzb.bjtu.edu.cn/bszs/"
 MAX_PAGES = 3
 
 HEADERS = {
@@ -40,15 +39,10 @@ def parse_page(
     返回 None 表示请求或页面结构异常；返回空列表表示没有更多数据。
     """
 
-    params = {
-        "cat": CATEGORY_ID,
-        "page": page,
-    }
-
     try:
+        index = "index" if page==1 else f"index{page-1}"
         response = session.get(
-            BASE_URL,
-            params=params,
+            urljoin(BASE_URL,f'{index}.htm'),
             timeout=config.REQUEST_TIMEOUT_SECONDS,
         )
     except requests.RequestException as error:
@@ -64,13 +58,12 @@ def parse_page(
         response.encoding = response.apparent_encoding
 
     soup = BeautifulSoup(response.text, "html.parser")
-    news_list = soup.find("ul", class_="sub_list")
+    news_list = soup.find("ul", class_="list01")
     if news_list is None:
-        logger.debug("第 %s 页未找到 ul.sub_list", page)
+        logger.debug("第 %s 页未找到 ul.list01", page)
         return []
-
     results: list[ResultSummary] = []
-    for item in news_list.find_all("li", class_="list_li_rt", recursive=False):
+    for item in news_list.find_all("li", recursive=False):
         result = _parse_list_item(item, response.url)
         if result is not None:
             results.append(result)
@@ -110,17 +103,17 @@ def crawl(max_pages: int = MAX_PAGES) -> list[ResultSummary] | None:
 
 # 从列表页的单个 li 节点中提取统一通知摘要。
 def _parse_list_item(item: BeautifulSoup, base_url: str) -> ResultSummary | None:
-    content = item.find(class_="list_content_rt")
+    content = item.find("a",href=True)
     if content is None:
         return None
+    href = content.get("href")
 
-    link_node = content.find("a", href=True)
-    if link_node is None:
+    title_node = content.find("p", class_="timeListPartnerTitle")
+    if title_node is None:
         return None
+    title = title_node.get_text(" ", strip=True)
 
-    title = link_node.get_text(" ", strip=True)
-    href = link_node.get("href")
-    if not title or not isinstance(href, str):
+    if href is None or title is None:
         return None
 
     return ResultSummary(
@@ -133,27 +126,18 @@ def _parse_list_item(item: BeautifulSoup, base_url: str) -> ResultSummary | None
 
 # 从列表项日期节点中解析发布时间文本。
 def _parse_date(item: BeautifulSoup) -> str | None:
-    date_node = item.find("div", class_="list_date")
+    date_node = item.find("div", class_="subListTime")
     if date_node is None:
         return None
-
-    day_node = date_node.find("span", class_="day")
-    month_node = date_node.find("span", class_="month")
-    day = day_node.get_text(strip=True) if day_node is not None else None
-    month = month_node.get_text(strip=True) if month_node is not None else None
-    return f"{day} {month}" if day and month else None
+    date = date_node.get_text(strip=True)
+    return f"{date}" if date else None
 
 
 # 允许本脚本单独运行，用于调试当前板块。
 def main() -> None:
-    setup_logging(source_debug=True)
-    results = crawl()
-    if results is None:
-        logger.error("爬虫运行失败。")
-        return
+    from scrape_scripts.debug_runner import run_standalone
 
-    for result in results:
-        logger.info("%s | %s | %s", result.date or "未知", result.title, result.url)
+    run_standalone(globals())
 
 
 if __name__ == "__main__":

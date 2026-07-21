@@ -14,10 +14,10 @@ from data_formats import ResultSummary
 
 logger = get_source_logger(__name__)
 
-SECTION_ID = "section_15"
-SECTION_NAME = "就业资讯-公示信息"
+SECTION_ID = "section_17"
+SECTION_NAME = "就业资讯-宣讲会"
 
-BASE_URL = "https://job.bjtu.edu.cn/f/newsCenter/ajax_list"
+BASE_URL = "https://job.bjtu.edu.cn/f/recruitmentFair/ajax_frontRecruitfair"
 SITE_ROOT_URL = "https://job.bjtu.edu.cn/"
 
 
@@ -34,8 +34,7 @@ HEADERS = {
     "Accept-Language": "zh-CN,zh;q=0.9",
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     "Host": "job.bjtu.edu.cn",
-    "Origin": "https://job.bjtu.edu.cn",
-    "Referer": "https://job.bjtu.edu.cn/frontpage/bjtu/html/newsList.html?id=3fcc824cecbc42aea3dce3700e5a4839",
+    "Referer": "https://job.bjtu.edu.cn/frontpage/bjtu/html/recruitmentFairList.html?type=3",
     "X-Requested-With": "XMLHttpRequest",
 }
 
@@ -52,21 +51,14 @@ def parse_page(
 
      # URL 查询字符串参数
     query_params = {
-        "ts": 1784620831595,
+        "ts": 1784621008034,
     }
 
-    # POST 表单数据
-    payload = {
-        "categoryId": "3fcc824cecbc42aea3dce3700e5a4839",
-        "pageNo": 1,
-        "pageSize": 20,
-    }
 
     try:
-        response = session.post(
+        response = session.get(
             BASE_URL,
             params=query_params,
-            data=payload,
             timeout=config.REQUEST_TIMEOUT_SECONDS,
         )
     except requests.RequestException as error:
@@ -89,9 +81,7 @@ def parse_page(
 
     dic_v1 = response_data.get("object")
     if dic_v1 is None : return None
-    dic_v2 = dic_v1.get("newsPage")
-    if dic_v2 is None : return None
-    item_list = dic_v2.get("list")
+    item_list = dic_v1.get("list")
     if not isinstance(item_list, list):
         logger.debug("第 %s 页 JSON 中未找到有效的 List 字段。", page)
         return None
@@ -145,8 +135,8 @@ def _parse_list_item(item: Any) -> ResultSummary | None:
     if not isinstance(item, dict):
         return None
 
-    title = item.get("name")
-    date = item.get("releaseDate")
+    title = item.get("title")
+    date = ""
     href = item.get("url")
 
     if not isinstance(title, str) or not title.strip():

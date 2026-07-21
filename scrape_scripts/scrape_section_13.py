@@ -8,22 +8,21 @@ from urllib.parse import urljoin
 import requests
 
 import config
-from app_logging import get_source_logger, setup_logging
+from app_logging import get_source_logger
 from data_formats import ResultSummary
 
 
 logger = get_source_logger(__name__)
 
 SECTION_ID = "section_13"
-SECTION_NAME = "教学运行中心-新闻动态"
+SECTION_NAME = "就业资讯-通知公告"
 
-BASE_URL = "https://toc.bjtu.edu.cn/Admin/ListHandler.ashx"
-SITE_ROOT_URL = "https://toc.bjtu.edu.cn/"
-# 浏览器请求中的 pc
-PAGE_CONTEXT_ID = 271889
+BASE_URL = "https://job.bjtu.edu.cn/f/newsCenter/ajax_list"
+SITE_ROOT_URL = "https://job.bjtu.edu.cn/"
 
 
-MAX_PAGES = 3
+
+MAX_PAGES = 1
 
 HEADERS = {
     "User-Agent": (
@@ -34,8 +33,9 @@ HEADERS = {
     "Accept": "application/json, text/javascript, */*; q=0.01",
     "Accept-Language": "zh-CN,zh;q=0.9",
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "Origin": "https://toc.bjtu.edu.cn",
-    "Referer": "https://toc.bjtu.edu.cn/notices.html",
+    "Host": "job.bjtu.edu.cn",
+    "Origin": "https://job.bjtu.edu.cn",
+    "Referer": "https://job.bjtu.edu.cn/frontpage/bjtu/html/newsList.html?id=3fcc824cecbc42aea3dce3700e5a4839",
     "X-Requested-With": "XMLHttpRequest",
 }
 
@@ -52,13 +52,14 @@ def parse_page(
 
      # URL 查询字符串参数
     query_params = {
-        "pc": PAGE_CONTEXT_ID,
-        "r": random.random(),
+        "ts": 1784619396103,
     }
 
     # POST 表单数据
     payload = {
-        "pn": page,
+        "categoryId": "6ebab28e72ba46da99a0f2c372b129d7",
+        "pageNo": 1,
+        "pageSize": 20,
     }
 
     try:
@@ -86,7 +87,11 @@ def parse_page(
         logger.debug("第 %s 页 JSON 顶层结构不是对象。", page)
         return None
 
-    item_list = response_data.get("List")
+    dic_v1 = response_data.get("object")
+    if response_data is None : return None
+    dic_v2 = dic_v1.get("newsPage")
+    if dic_v2 is None : return None
+    item_list = dic_v2.get("list")
     if not isinstance(item_list, list):
         logger.debug("第 %s 页 JSON 中未找到有效的 List 字段。", page)
         return None
@@ -140,9 +145,9 @@ def _parse_list_item(item: Any) -> ResultSummary | None:
     if not isinstance(item, dict):
         return None
 
-    title = item.get("Title")
-    date = item.get("UpdateTime")
-    href = item.get("URL")
+    title = item.get("name")
+    date = item.get("releaseDate")
+    href = item.get("url")
 
     if not isinstance(title, str) or not title.strip():
         return None
@@ -163,14 +168,9 @@ def _parse_list_item(item: Any) -> ResultSummary | None:
 
 # 允许本脚本单独运行，用于调试当前板块。
 def main() -> None:
-    setup_logging(source_debug=True)
-    results = crawl()
-    if results is None:
-        logger.error("爬虫运行失败。")
-        return
+    from scrape_scripts.debug_runner import run_standalone
 
-    for result in results:
-        logger.info("%s | %s | %s", result.date or "未知", result.title, result.url)
+    run_standalone(globals())
 
 
 if __name__ == "__main__":

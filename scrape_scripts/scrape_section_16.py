@@ -14,8 +14,8 @@ from data_formats import ResultSummary
 
 logger = get_source_logger(__name__)
 
-SECTION_ID = "section_15"
-SECTION_NAME = "就业资讯-公示信息"
+SECTION_ID = "section_16"
+SECTION_NAME = "就业资讯-选调生"
 
 BASE_URL = "https://job.bjtu.edu.cn/f/newsCenter/ajax_list"
 SITE_ROOT_URL = "https://job.bjtu.edu.cn/"
@@ -52,12 +52,12 @@ def parse_page(
 
      # URL 查询字符串参数
     query_params = {
-        "ts": 1784620831595,
+        "ts": 1784620911382,
     }
 
     # POST 表单数据
     payload = {
-        "categoryId": "3fcc824cecbc42aea3dce3700e5a4839",
+        "categoryId": "a4e53da7976e4a7aa82f77298fa9f33c",
         "pageNo": 1,
         "pageSize": 20,
     }

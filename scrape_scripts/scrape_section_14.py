@@ -8,23 +8,21 @@ from urllib.parse import urljoin
 import requests
 
 import config
-from app_logging import get_source_logger, setup_logging
+from app_logging import get_source_logger
 from data_formats import ResultSummary
 
 
 logger = get_source_logger(__name__)
 
 SECTION_ID = "section_14"
-SECTION_NAME = "图书馆-新闻通知"
+SECTION_NAME = "就业资讯-新闻中心"
 
-BASE_URL = "https://lib.bjtu.edu.cn/engine2/data/api-v2/0/type/datas"
-
-DATA_PREFIX_URL = "https://lib.bjtu.edu.cn/entry/v2/sub/0065540d21f75cd6301c8ecf9da712bf"
-# 浏览器请求中的 pc
-PAGE_CONTEXT_ID = 271889
+BASE_URL = "https://job.bjtu.edu.cn/f/newsCenter/ajax_list"
+SITE_ROOT_URL = "https://job.bjtu.edu.cn/"
 
 
-MAX_PAGES = 3
+
+MAX_PAGES = 1
 
 HEADERS = {
     "User-Agent": (
@@ -35,6 +33,10 @@ HEADERS = {
     "Accept": "application/json, text/javascript, */*; q=0.01",
     "Accept-Language": "zh-CN,zh;q=0.9",
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "Host": "job.bjtu.edu.cn",
+    "Origin": "https://job.bjtu.edu.cn",
+    "Referer": "https://job.bjtu.edu.cn/frontpage/bjtu/html/newsList.html?id=3fcc824cecbc42aea3dce3700e5a4839",
+    "X-Requested-With": "XMLHttpRequest",
 }
 
 
@@ -50,24 +52,21 @@ def parse_page(
 
      # URL 查询字符串参数
     query_params = {
-        "e": "d3e8e94b8ae62311f01bd957db807e967c07",
-        "t": "",
-        "ap": 5,
-        "sw": "",
-        "isOr": "false",
-        "typeIds": "",
-        "rellds": "",
-        "groupTypeId": "",
-        "p2": 7,
-        "p": page,
-        "nv": "false",
-        "m": 0
+        "ts": 1784620619555,
+    }
+
+    # POST 表单数据
+    payload = {
+        "categoryId": "3fcc824cecbc42aea3dce3700e5a4839",
+        "pageNo": 1,
+        "pageSize": 20,
     }
 
     try:
-        response = session.get(
+        response = session.post(
             BASE_URL,
             params=query_params,
+            data=payload,
             timeout=config.REQUEST_TIMEOUT_SECONDS,
         )
     except requests.RequestException as error:
@@ -88,7 +87,11 @@ def parse_page(
         logger.debug("第 %s 页 JSON 顶层结构不是对象。", page)
         return None
 
-    item_list = response_data.get("data").get("datas").get("datas")
+    dic_v1 = response_data.get("object")
+    if dic_v1 is None : return None
+    dic_v2 = dic_v1.get("newsPage")
+    if dic_v2 is None : return None
+    item_list = dic_v2.get("list")
     if not isinstance(item_list, list):
         logger.debug("第 %s 页 JSON 中未找到有效的 List 字段。", page)
         return None
@@ -142,9 +145,9 @@ def _parse_list_item(item: Any) -> ResultSummary | None:
     if not isinstance(item, dict):
         return None
 
-    title = item.get("title")
-    date = item.get("publishTime")
-    href = item.get("publicId")
+    title = item.get("name")
+    date = item.get("releaseDate")
+    href = item.get("url")
 
     if not isinstance(title, str) or not title.strip():
         return None
@@ -158,21 +161,16 @@ def _parse_list_item(item: Any) -> ResultSummary | None:
     return ResultSummary(
         section=SECTION_NAME,
         title=title.strip(),
-        url= f"{DATA_PREFIX_URL}?dataId={href.strip()}",
+        url=urljoin(SITE_ROOT_URL, href.strip()),
         date=date.strip() if date is not None else None,
     )
 
 
 # 允许本脚本单独运行，用于调试当前板块。
 def main() -> None:
-    setup_logging(source_debug=True)
-    results = crawl()
-    if results is None:
-        logger.error("爬虫运行失败。")
-        return
+    from scrape_scripts.debug_runner import run_standalone
 
-    for result in results:
-        logger.info("%s | %s | %s", result.date or "未知", result.title, result.url)
+    run_standalone(globals())
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ DEBUG_SOURCES = False
 REQUEST_TIMEOUT_SECONDS = 15.0
 
 # 同一个板块连续请求之间的等待时间，单位秒，避免访问过于频繁。
-REQUEST_DELAY_SECONDS = 0.1
+REQUEST_DELAY_SECONDS = 0.5
 
 # 每个网页板块一个独立脚本；元组格式为：("模块导入路径", "入口函数名")。
 SOURCE_ADAPTERS = [

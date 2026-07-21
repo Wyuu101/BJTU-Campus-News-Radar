@@ -13,11 +13,11 @@ from data_formats import ResultSummary
 
 logger = get_source_logger(__name__)
 
-SECTION_ID = "section_11"
-SECTION_NAME = "体育学院-体育风采"
+SECTION_ID = "section_1"
+SECTION_NAME = "交大官网-通知公告"
 
-BASE_URL = "https://sports.bjtu.edu.cn/xwgg/tyfc/index.htm"
-MAX_PAGES = 1
+BASE_URL = "https://www.bjtu.edu.cn/tzgg/"
+MAX_PAGES = 3
 
 HEADERS = {
     "User-Agent": (
@@ -58,9 +58,9 @@ def parse_page(
         response.encoding = response.apparent_encoding
 
     soup = BeautifulSoup(response.text, "html.parser")
-    news_list = soup.find("ul", class_="list01")
+    news_list = soup.find("ul", class_="bjtu-list05 clear")
     if news_list is None:
-        logger.debug("第 %s 页未找到 ul.list01", page)
+        logger.debug("第 %s 页未找到 ul.bjtu-list05 clear", page)
         return []
     results: list[ResultSummary] = []
     for item in news_list.find_all("li", recursive=False):
@@ -123,7 +123,7 @@ def _parse_list_item(item: BeautifulSoup, base_url: str) -> ResultSummary | None
 
 # 从列表项日期节点中解析发布时间文本。
 def _parse_date(item: BeautifulSoup) -> str | None:
-    date_node = item.find("span", class_="rightDate")
+    date_node = item.find("span")
     if date_node is None:
         return None
     date = date_node.get_text(strip=True)

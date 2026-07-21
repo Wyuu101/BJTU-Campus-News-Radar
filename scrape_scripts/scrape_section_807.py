@@ -7,17 +7,17 @@ import requests
 from bs4 import BeautifulSoup
 
 import config
-from app_logging import get_source_logger, setup_logging
+from app_logging import get_source_logger
 from data_formats import ResultSummary
 
 
 logger = get_source_logger(__name__)
 
-SECTION_ID = "section_03"
-SECTION_NAME = "电信学院-研究生招生"
+SECTION_ID = "section_807"
+SECTION_NAME = "电信学院-国际交流动态"
 
 BASE_URL = "https://eie.bjtu.edu.cn/cms/item/"
-CATEGORY_ID = 109
+CATEGORY_ID = 112
 MAX_PAGES = 3
 
 HEADERS = {
@@ -66,11 +66,11 @@ def parse_page(
     soup = BeautifulSoup(response.text, "html.parser")
     news_list = soup.find("ul", class_="sub_list")
     if news_list is None:
-        logger.debug("第 %s 页未找到 ul.sub_list。", page)
+        logger.debug("第 %s 页未找到 ul.sub_list", page)
         return []
 
     results: list[ResultSummary] = []
-    for item in news_list.find_all("li", class_="sub_list_li", recursive=False):
+    for item in news_list.find_all("li", class_="list_li_rt", recursive=False):
         result = _parse_list_item(item, response.url)
         if result is not None:
             results.append(result)
@@ -110,7 +110,7 @@ def crawl(max_pages: int = MAX_PAGES) -> list[ResultSummary] | None:
 
 # 从列表页的单个 li 节点中提取统一通知摘要。
 def _parse_list_item(item: BeautifulSoup, base_url: str) -> ResultSummary | None:
-    content = item.find(class_="sub_list_title")
+    content = item.find(class_="list_content_rt")
     if content is None:
         return None
 
@@ -133,23 +133,22 @@ def _parse_list_item(item: BeautifulSoup, base_url: str) -> ResultSummary | None
 
 # 从列表项日期节点中解析发布时间文本。
 def _parse_date(item: BeautifulSoup) -> str | None:
-    date_node = item.find("div", class_="sub_list_date")
+    date_node = item.find("div", class_="list_date")
     if date_node is None:
         return None
-    date = date_node.get_text()
-    return f"{date}" if date else None
+
+    day_node = date_node.find("span", class_="day")
+    month_node = date_node.find("span", class_="month")
+    day = day_node.get_text(strip=True) if day_node is not None else None
+    month = month_node.get_text(strip=True) if month_node is not None else None
+    return f"{day} {month}" if day and month else None
 
 
 # 允许本脚本单独运行，用于调试当前板块。
 def main() -> None:
-    setup_logging(source_debug=True)
-    results = crawl()
-    if results is None:
-        logger.error("爬虫运行失败。")
-        return
+    from scrape_scripts.debug_runner import run_standalone
 
-    for result in results:
-        logger.info("%s | %s | %s", result.date or "未知", result.title, result.url)
+    run_standalone(globals())
 
 
 if __name__ == "__main__":

@@ -1,29 +1,23 @@
 from __future__ import annotations
 
 import time
-import random
-from typing import Any
 from urllib.parse import urljoin
 
 import requests
+from bs4 import BeautifulSoup
 
 import config
-from app_logging import get_source_logger, setup_logging
+from app_logging import get_source_logger
 from data_formats import ResultSummary
 
 
 logger = get_source_logger(__name__)
 
 SECTION_ID = "section_12"
-SECTION_NAME = "教学运行中心-通知公告"
+SECTION_NAME = "体育学院-通知公告"
 
-BASE_URL = "https://toc.bjtu.edu.cn/Admin/ListHandler.ashx"
-SITE_ROOT_URL = "https://toc.bjtu.edu.cn/"
-# 浏览器请求中的 pc
-PAGE_CONTEXT_ID = 271891
-
-
-MAX_PAGES = 3
+BASE_URL = "https://sports.bjtu.edu.cn/xwgg/tzgg/index.htm"
+MAX_PAGES = 1
 
 HEADERS = {
     "User-Agent": (
@@ -31,12 +25,7 @@ HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/126.0.0.0 Safari/537.36"
     ),
-    "Accept": "application/json, text/javascript, */*; q=0.01",
     "Accept-Language": "zh-CN,zh;q=0.9",
-    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "Origin": "https://toc.bjtu.edu.cn",
-    "Referer": "https://toc.bjtu.edu.cn/notices.html",
-    "X-Requested-With": "XMLHttpRequest",
 }
 
 
@@ -47,25 +36,13 @@ def parse_page(
 ) -> list[ResultSummary] | None:
     """解析指定页。
 
-    返回 None 表示请求或响应结构异常；返回空列表表示没有更多数据。
+    返回 None 表示请求或页面结构异常；返回空列表表示没有更多数据。
     """
 
-     # URL 查询字符串参数
-    query_params = {
-        "pc": PAGE_CONTEXT_ID,
-        "r": random.random(),
-    }
-
-    # POST 表单数据
-    payload = {
-        "pn": page,
-    }
-
     try:
-        response = session.post(
-            BASE_URL,
-            params=query_params,
-            data=payload,
+        index = "index" if page==1 else f"index{page-1}"
+        response = session.get(
+            urljoin(BASE_URL,f'{index}.htm'),
             timeout=config.REQUEST_TIMEOUT_SECONDS,
         )
     except requests.RequestException as error:
@@ -76,33 +53,22 @@ def parse_page(
         logger.debug("第 %s 页请求失败，HTTP 状态码：%s", page, response.status_code)
         return None
 
-    try:
-        response_data = response.json()
-    except requests.exceptions.JSONDecodeError as error:
-        logger.debug("第 %s 页响应不是合法 JSON：%s", page, error)
-        return None
+    # 部分中文站点会被 requests 误判为 iso-8859-1。
+    if not response.encoding or response.encoding.lower() == "iso-8859-1":
+        response.encoding = response.apparent_encoding
 
-    if not isinstance(response_data, dict):
-        logger.debug("第 %s 页 JSON 顶层结构不是对象。", page)
-        return None
-
-    item_list = response_data.get("List")
-    if not isinstance(item_list, list):
-        logger.debug("第 %s 页 JSON 中未找到有效的 List 字段。", page)
-        return None
-
+    soup = BeautifulSoup(response.text, "html.parser")
+    news_list = soup.find("ul", class_="list01")
+    if news_list is None:
+        logger.debug("第 %s 页未找到 ul.list01", page)
+        return []
     results: list[ResultSummary] = []
-    for item in item_list:
-        result = _parse_list_item(item)
+    for item in news_list.find_all("li", recursive=False):
+        result = _parse_list_item(item, response.url)
         if result is not None:
             results.append(result)
 
-    logger.debug(
-        "第 %s 页解析完成，总记录数：%s，本页获取到 %s 条通知。",
-        page,
-        response_data.get("Count", "未知"),
-        len(results),
-    )
+    logger.debug("第 %s 页解析完成，获取到 %s 条。", page, len(results))
     return results
 
 
@@ -135,42 +101,40 @@ def crawl(max_pages: int = MAX_PAGES) -> list[ResultSummary] | None:
     return list(unique_results.values())
 
 
-# 从接口返回的单条 JSON 数据中提取统一通知摘要。
-def _parse_list_item(item: Any) -> ResultSummary | None:
-    if not isinstance(item, dict):
+# 从列表页的单个 li 节点中提取统一通知摘要。
+def _parse_list_item(item: BeautifulSoup, base_url: str) -> ResultSummary | None:
+    content = item.find("a",href=True)
+    if content is None:
         return None
+    href = content.get("href")
 
-    title = item.get("Title")
-    date = item.get("UpdateTime")
-    href = item.get("URL")
+    title = content.get_text(" ", strip=True)
 
-    if not isinstance(title, str) or not title.strip():
+    if not href or not title:
         return None
-
-    if not isinstance(href, str) or not href.strip():
-        return None
-
-    if not isinstance(date, str) or not date.strip():
-        date = None
 
     return ResultSummary(
         section=SECTION_NAME,
-        title=title.strip(),
-        url=urljoin(SITE_ROOT_URL, href.strip()),
-        date=date.strip() if date is not None else None,
+        title=title,
+        url=urljoin(base_url, href),
+        date=_parse_date(item),
     )
+
+
+# 从列表项日期节点中解析发布时间文本。
+def _parse_date(item: BeautifulSoup) -> str | None:
+    date_node = item.find("span", class_="rightDate")
+    if date_node is None:
+        return None
+    date = date_node.get_text(strip=True)
+    return f"{date}" if date else None
 
 
 # 允许本脚本单独运行，用于调试当前板块。
 def main() -> None:
-    setup_logging(source_debug=True)
-    results = crawl()
-    if results is None:
-        logger.error("爬虫运行失败。")
-        return
+    from scrape_scripts.debug_runner import run_standalone
 
-    for result in results:
-        logger.info("%s | %s | %s", result.date or "未知", result.title, result.url)
+    run_standalone(globals())
 
 
 if __name__ == "__main__":
