@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import config
 from app_logging import get_runner_logger, setup_logging
 from data_formats import ResultSummary
 from email_notifier import EmailNotifier
 from storage import NoticeStore
+from utils import normalize_text
 from web_integration import dispatch_pending_notices, record_new_notice_count
 
 
@@ -17,15 +19,31 @@ logger = get_runner_logger("runner")
 SourceCrawler = Callable[[], list[ResultSummary] | None]
 
 
+@dataclass(frozen=True, slots=True)
+class LoadedCrawler:
+    """Runner 已加载的单个板块扫描入口。"""
+
+    module_name: str
+    section_name: str
+    crawl: SourceCrawler
+
+
 # 从配置中加载各网页板块的入口函数。
-def load_crawlers() -> list[tuple[str, SourceCrawler]]:
-    crawlers: list[tuple[str, SourceCrawler]] = []
+def load_crawlers() -> list[LoadedCrawler]:
+    crawlers: list[LoadedCrawler] = []
     for module_name, function_name in config.SOURCE_ADAPTERS:
         module = importlib.import_module(module_name)
         crawl = getattr(module, function_name, None)
         if not callable(crawl):
             raise TypeError(f"{module_name} 必须暴露可调用的 {function_name}() 函数")
-        crawlers.append((f"{module_name}.{function_name}", crawl))
+        section_name = getattr(module, "SECTION_NAME", "")
+        crawlers.append(
+            LoadedCrawler(
+                module_name=f"{module_name}.{function_name}",
+                section_name=normalize_text(section_name) if isinstance(section_name, str) else "",
+                crawl=crawl,
+            )
+        )
     return crawlers
 
 
@@ -37,42 +55,51 @@ def run_once() -> int:
     store = NoticeStore()
     is_initial_deploy = not store.exists()
     store.initialize()
+    existing_sections_before_scan = store.get_existing_sections()
 
     crawlers = load_crawlers()
     logger.info("雷达扫描启动：%s 个网页板块。", len(crawlers))
 
     all_new_count = 0
-    all_new_records = []
+    notifiable_new_records = []
     scan_success_count = 0
     scan_failure_count = 0
     scan_failures: list[str] = []
-    for module_name, crawl in crawlers:
-        logger.info("开始扫描：%s", module_name)
+    for crawler in crawlers:
+        logger.info("开始扫描：%s", crawler.module_name)
         try:
-            results = crawl()
+            results = crawler.crawl()
         except Exception as error:
             scan_failure_count += 1
-            scan_failures.append(f"{module_name}: {_summarize_error(error)}")
-            logger.exception("扫描失败：%s", module_name)
+            scan_failures.append(f"{crawler.module_name}: {_summarize_error(error)}")
+            logger.exception("扫描失败：%s", crawler.module_name)
             continue
 
         if results is None:
             scan_failure_count += 1
-            scan_failures.append(f"{module_name}: 返回结果为空")
-            logger.warning("扫描中止：%s", module_name)
+            scan_failures.append(f"{crawler.module_name}: 返回结果为空")
+            logger.warning("扫描中止：%s", crawler.module_name)
             continue
 
         new_records = store.add_notices(results)
         all_new_count += len(new_records)
-        all_new_records.extend(new_records)
+        if not is_initial_deploy and _is_new_section(crawler.section_name, existing_sections_before_scan):
+            logger.info(
+                "检测到新板块初始化：%s，本轮新增 %s 条仅入库，不纳入今日统计和邮件通知。",
+                crawler.section_name or crawler.module_name,
+                len(new_records),
+            )
+        else:
+            notifiable_new_records.extend(new_records)
+
         if len(results) == 0:
             scan_failure_count += 1
-            scan_failures.append(f"{module_name}: 本次获取 0 条")
+            scan_failures.append(f"{crawler.module_name}: 本次获取 0 条")
         else:
             scan_success_count += 1
         logger.info(
             "扫描完成：%s，本次获取 %s 条，新增 %s 条。",
-            module_name,
+            crawler.module_name,
             len(results),
             len(new_records),
         )
@@ -85,11 +112,11 @@ def run_once() -> int:
     if is_initial_deploy:
         logger.info("检测到首次初始化部署：已入库 %s 条通知，本轮不写入今日统计，也不发送邮件。", all_new_count)
     else:
-        if not all_new_records:
+        if not notifiable_new_records:
             logger.info("本轮没有新增通知，无需发送邮件。")
         else:
             try:
-                stats_recorded = record_new_notice_count(all_new_count)
+                stats_recorded = record_new_notice_count(len(notifiable_new_records))
             except Exception as error:
                 mail_failure_count += 1
                 mail_failures.append(("<统计写入>", _summarize_error(error)))
@@ -100,7 +127,7 @@ def run_once() -> int:
                     mail_failures.append(("<统计写入>", "Web 环境不可用"))
                 else:
                     try:
-                        mail_summary = dispatch_pending_notices(all_new_records)
+                        mail_summary = dispatch_pending_notices(notifiable_new_records)
                     except Exception as error:
                         mail_failure_count += 1
                         mail_failures.append(("<邮件任务>", _summarize_error(error)))
@@ -130,6 +157,11 @@ def run_once() -> int:
 
     logger.info("雷达扫描结束：本轮新增 %s 条。", all_new_count)
     return 1 if scan_failure_count or mail_failure_count else 0
+
+
+# 判断当前板块在本轮扫描开始前是否从未入库过。
+def _is_new_section(section_name: str, existing_sections_before_scan: set[str]) -> bool:
+    return bool(section_name) and section_name not in existing_sections_before_scan
 
 
 # 将异常压缩为适合 INFO 级日志展示的短原因。

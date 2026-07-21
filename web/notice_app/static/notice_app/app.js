@@ -42,9 +42,9 @@ const PREVIEW_SLIDES = [
     caption: "提醒邮件内部页面展示，点击按钮即可跳转至信息源查看。",
   },
   {
-    image: "",
-    alt: "效果图三",
-    caption: "这里预留第三张效果图的说明文字，可展示统计看板或其他公益服务成果。",
+    image: "/static/notice_app/concept_images/concept_img3.png",
+    alt: "轮播图3",
+    caption: "您可根据个人喜好开启或关闭接收指定部分的新讯通知。",
   },
 ];
 

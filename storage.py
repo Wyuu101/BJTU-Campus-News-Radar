@@ -81,6 +81,12 @@ class NoticeStore:
                 )
         return new_records
 
+    # 读取当前数据库中已经出现过的板块名，用于判断新增爬虫板块是否需要初始化。
+    def get_existing_sections(self) -> set[str]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT DISTINCT section FROM notices").fetchall()
+        return {normalize_text(row["section"]) for row in rows if row["section"]}
+
     # 创建 SQLite 连接并启用按列名读取结果。
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
