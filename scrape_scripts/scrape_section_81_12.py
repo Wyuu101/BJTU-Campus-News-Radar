@@ -13,11 +13,11 @@ from data_formats import ResultSummary
 
 logger = get_source_logger(__name__)
 
-SECTION_ID = "section_803"
-SECTION_NAME = "电信学院-研究生招生"
+SECTION_ID = "section_81_12"
+SECTION_NAME = "经管学院-研究生学位工作"
 
-BASE_URL = "https://eie.bjtu.edu.cn/cms/item/"
-CATEGORY_ID = 109
+BASE_URL = "https://sem.bjtu.edu.cn/lists-yjs_ktdb.html"
+
 MAX_PAGES = 3
 
 HEADERS = {
@@ -41,7 +41,6 @@ def parse_page(
     """
 
     params = {
-        "cat": CATEGORY_ID,
         "page": page,
     }
 
@@ -64,13 +63,12 @@ def parse_page(
         response.encoding = response.apparent_encoding
 
     soup = BeautifulSoup(response.text, "html.parser")
-    news_list = soup.find("ul", class_="sub_list")
+    news_list = soup.find("ul", class_="all_list")
     if news_list is None:
-        logger.debug("第 %s 页未找到 ul.sub_list。", page)
+        logger.debug("第 %s 页未找到 ul.all_list", page)
         return []
-
     results: list[ResultSummary] = []
-    for item in news_list.find_all("li", class_="sub_list_li", recursive=False):
+    for item in news_list.find_all("p", recursive=True):
         result = _parse_list_item(item, response.url)
         if result is not None:
             results.append(result)
@@ -87,7 +85,7 @@ def crawl(max_pages: int = MAX_PAGES) -> list[ResultSummary] | None:
 
     with requests.Session() as session:
         session.headers.update(HEADERS)
-
+        
         for page in range(1, max_pages + 1):
             page_results = parse_page(session=session, page=page)
             if page_results is None:
@@ -110,35 +108,30 @@ def crawl(max_pages: int = MAX_PAGES) -> list[ResultSummary] | None:
 
 # 从列表页的单个 li 节点中提取统一通知摘要。
 def _parse_list_item(item: BeautifulSoup, base_url: str) -> ResultSummary | None:
-    content = item.find(class_="sub_list_title")
-    if content is None:
-        return None
 
-    link_node = content.find("a", href=True)
-    if link_node is None:
+    href_and_title_node = item.find("a",recursive=True)
+    if href_and_title_node is None: return None
+    href = href_and_title_node.get("href")
+    if  not isinstance(href, str) or not href:
         return None
-
-    title = link_node.get_text(" ", strip=True)
-    href = link_node.get("href")
-    if not title or not isinstance(href, str):
-        return None
-
+    title = href_and_title_node.get_text(" ",strip=True)
+    
     return ResultSummary(
         section=SECTION_NAME,
         title=title,
-        url=urljoin(base_url, href),
+        url=urljoin(base_url,href),
         date=_parse_date(item),
     )
 
 
 # 从列表项日期节点中解析发布时间文本。
 def _parse_date(item: BeautifulSoup) -> str | None:
-    date_node = item.find("div", class_="sub_list_date")
+    date_node = item.find("span", class_="time_all",recursive=True)
     if date_node is None:
         return None
-    date = date_node.get_text()
-    return f"{date}" if date else None
+    date = date_node.get_text("",strip=True)
 
+    return f"{date}" if date is not None else None
 
 # 允许本脚本单独运行，用于调试当前板块。
 def main() -> None:

@@ -13,12 +13,12 @@ from data_formats import ResultSummary
 
 logger = get_source_logger(__name__)
 
-SECTION_ID = "section_811"
-SECTION_NAME = "经管学院-通知公告"
+SECTION_ID = "section_80_07"
+SECTION_NAME = "电信学院-国际交流动态"
 
-BASE_URL = "https://sem.bjtu.edu.cn/lists-sem_tzgg.html"
-
-MAX_PAGES = 4
+BASE_URL = "https://eie.bjtu.edu.cn/cms/item/"
+CATEGORY_ID = 112
+MAX_PAGES = 3
 
 HEADERS = {
     "User-Agent": (
@@ -41,6 +41,7 @@ def parse_page(
     """
 
     params = {
+        "cat": CATEGORY_ID,
         "page": page,
     }
 
@@ -63,13 +64,13 @@ def parse_page(
         response.encoding = response.apparent_encoding
 
     soup = BeautifulSoup(response.text, "html.parser")
-    news_list = soup.find("ul", class_="all_list")
+    news_list = soup.find("ul", class_="sub_list")
     if news_list is None:
-        logger.debug("第 %s 页未找到 ul.all_list", page)
+        logger.debug("第 %s 页未找到 ul.sub_list", page)
         return []
 
     results: list[ResultSummary] = []
-    for item in news_list.find_all("p", recursive=True):
+    for item in news_list.find_all("li", class_="list_li_rt", recursive=False):
         result = _parse_list_item(item, response.url)
         if result is not None:
             results.append(result)
@@ -109,37 +110,39 @@ def crawl(max_pages: int = MAX_PAGES) -> list[ResultSummary] | None:
 
 # 从列表页的单个 li 节点中提取统一通知摘要。
 def _parse_list_item(item: BeautifulSoup, base_url: str) -> ResultSummary | None:
-
-    content = item.find_all("a")
+    content = item.find(class_="list_content_rt")
     if content is None:
         return None
-    if len(content) < 2:
-        return None
-    
-    link_and_href_node  = content[1]
 
-    title = link_and_href_node.get_text(" ", strip=True)
-    href = link_and_href_node.get("href")
-
-    if not title or not isinstance(href, str) or not href:
+    link_node = content.find("a", href=True)
+    if link_node is None:
         return None
-    
+
+    title = link_node.get_text(" ", strip=True)
+    href = link_node.get("href")
+    if not title or not isinstance(href, str):
+        return None
+
     return ResultSummary(
         section=SECTION_NAME,
         title=title,
-        url=href,
+        url=urljoin(base_url, href),
         date=_parse_date(item),
     )
 
 
 # 从列表项日期节点中解析发布时间文本。
 def _parse_date(item: BeautifulSoup) -> str | None:
-    date_node = item.find("span", class_="time_all",recursive=True)
+    date_node = item.find("div", class_="list_date")
     if date_node is None:
         return None
 
-    date = date_node.getText(" ",strip=True)
-    return f"{date}" if date is not None else None
+    day_node = date_node.find("span", class_="day")
+    month_node = date_node.find("span", class_="month")
+    day = day_node.get_text(strip=True) if day_node is not None else None
+    month = month_node.get_text(strip=True) if month_node is not None else None
+    return f"{day} {month}" if day and month else None
+
 
 # 允许本脚本单独运行，用于调试当前板块。
 def main() -> None:

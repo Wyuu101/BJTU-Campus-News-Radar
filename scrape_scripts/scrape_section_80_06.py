@@ -13,7 +13,7 @@ from data_formats import ResultSummary
 
 logger = get_source_logger(__name__)
 
-SECTION_ID = "section_806"
+SECTION_ID = "section_80_06"
 SECTION_NAME = "电信学院-海外学习"
 
 BASE_URL = "https://eie.bjtu.edu.cn/cms/item/"

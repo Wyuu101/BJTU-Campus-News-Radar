@@ -13,11 +13,11 @@ from data_formats import ResultSummary
 
 logger = get_source_logger(__name__)
 
-SECTION_ID = "section_807"
-SECTION_NAME = "电信学院-国际交流动态"
+SECTION_ID = "section_80_05"
+SECTION_NAME = "电信学院-学术活动"
 
 BASE_URL = "https://eie.bjtu.edu.cn/cms/item/"
-CATEGORY_ID = 112
+CATEGORY_ID = 105
 MAX_PAGES = 3
 
 HEADERS = {
@@ -66,7 +66,7 @@ def parse_page(
     soup = BeautifulSoup(response.text, "html.parser")
     news_list = soup.find("ul", class_="sub_list")
     if news_list is None:
-        logger.debug("第 %s 页未找到 ul.sub_list", page)
+        logger.debug("第 %s 页未找到 ul.sub_list。", page)
         return []
 
     results: list[ResultSummary] = []
