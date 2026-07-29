@@ -12,11 +12,11 @@
 
 ## 二、项目简介
 
-BJTU Campus News Radar 是一个面向北京交通大学校内信息的公益索引与邮件提醒工具。项目会定时扫描已配置的校内公开信息源，识别新增内容并根据用户订阅偏好发送邮件提醒，用户点击邮件卡片后跳转到学校官网查看原文。
+BJTU Campus News Radar 是一个面向北京交通大学校内信息的公益索引与邮件提醒工具。项目会定时扫描已配置的校内公开信息源，识别新增内容并根据用户订阅偏好发送邮件提醒，用户点击邮件卡片后跳转到学校官网查看原文。项目目标并非替代官网，而是帮助同学更及时地发现分散在各站点上的校园新事。
 
-项目目标不是替代官网，而是帮助同学更及时地发现分散在各站点上的校园新事。
+项目前端约90%的代码使用了Vibe Coding，后端代码约40%使用了Vibe Codeing，代码均已进行人工审查。
 
-**目前已有基于本项目部署的公益服务站点，欢迎前往[在线体验](https://radar.wyuu.eu.cc)。**
+**目前已有基于本项目部署的公益服务站点，欢迎前往[在线体验](https://radar.uuserver.cn)。**
 
 ---
 
@@ -34,19 +34,25 @@ BJTU Campus News Radar 是一个面向北京交通大学校内信息的公益索
 
 ## 四、页面展示
 
-### 4.1 信息索引展示
+### 4.1 工作逻辑简图
 
 ![信息索引展示](web/notice_app/static/notice_app/concept_images/concept_img1.png)
 
 汇总校园各类讯息的链接索引，通过邮件及时提醒您前往官网查看。
 
-### 4.2 邮件提醒展示
+### 4.2 Web首页展示
+
+![Web首页展示](web/notice_app/static/notice_app/concept_images/concept_img0.png)
+
+汇总校园各类讯息的链接索引，通过邮件及时提醒您前往官网查看。
+
+### 4.3 邮件提醒展示
 
 ![邮件提醒展示](web/notice_app/static/notice_app/concept_images/concept_img2.png)
 
 提醒邮件内部页面展示，点击按钮即可跳转至信息源查看。
 
-### 4.3 订阅偏好展示
+### 4.4 订阅偏好展示
 
 ![订阅偏好展示](web/notice_app/static/notice_app/concept_images/concept_img3.png)
 
