@@ -13,7 +13,7 @@ from data_formats import ResultSummary
 
 logger = get_source_logger(__name__)
 
-SECTION_ID = "section_85_03"
+SECTION_ID = "section_85_04"
 # 本科招生
 SECTION_NAME = "软件学院-本科生教育"
 
