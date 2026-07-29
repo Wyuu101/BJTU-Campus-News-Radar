@@ -31,6 +31,7 @@ class NoticeStore:
                 CREATE TABLE IF NOT EXISTS notices (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     content_hash TEXT NOT NULL UNIQUE,
+                    section_id TEXT NOT NULL DEFAULT '',
                     section TEXT NOT NULL,
                     title TEXT NOT NULL,
                     url TEXT NOT NULL,
@@ -41,23 +42,26 @@ class NoticeStore:
                 DROP TABLE IF EXISTS email_queue;
                 """
             )
+            self._ensure_notice_columns(conn)
 
     # 写入扫描结果，过滤旧通知，并返回本轮新增通知。
-    def add_notices(self, notices: Iterable[ResultSummary]) -> list[NoticeRecord]:
+    def add_notices(self, notices: Iterable[ResultSummary], *, section_id: str = "") -> list[NoticeRecord]:
         """写入本次扫描结果，并返回本轮首次发现的通知。"""
 
         new_records: list[NoticeRecord] = []
+        normalized_section_id = normalize_text(section_id)
         with self._connect() as conn:
             for notice in notices:
-                notice_hash = build_notice_hash(notice)
+                notice_hash = build_notice_hash(notice, section_id=normalized_section_id)
                 cursor = conn.execute(
                     """
                     INSERT OR IGNORE INTO notices
-                        (content_hash, section, title, url, date)
-                    VALUES (?, ?, ?, ?, ?)
+                        (content_hash, section_id, section, title, url, date)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         notice_hash,
+                        normalized_section_id,
                         normalize_text(notice.section),
                         normalize_text(notice.title),
                         normalize_url(notice.url),
@@ -72,6 +76,7 @@ class NoticeStore:
                 new_records.append(
                     NoticeRecord(
                         notice_id=notice_id,
+                        section_id=normalized_section_id,
                         section=normalize_text(notice.section),
                         title=normalize_text(notice.title),
                         url=normalize_url(notice.url),
@@ -81,11 +86,17 @@ class NoticeStore:
                 )
         return new_records
 
-    # 读取当前数据库中已经出现过的板块名，用于判断新增爬虫板块是否需要初始化。
-    def get_existing_sections(self) -> set[str]:
+    # 读取当前数据库中已经出现过的唯一板块脚本 ID，用于判断新增爬虫脚本是否需要初始化。
+    def get_existing_section_ids(self) -> set[str]:
         with self._connect() as conn:
-            rows = conn.execute("SELECT DISTINCT section FROM notices").fetchall()
-        return {normalize_text(row["section"]) for row in rows if row["section"]}
+            rows = conn.execute("SELECT DISTINCT section_id FROM notices").fetchall()
+        return {normalize_text(row["section_id"]) for row in rows if row["section_id"]}
+
+    # 为旧数据库补齐新增列，避免已有本地数据在升级后无法继续运行。
+    def _ensure_notice_columns(self, conn: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(notices)").fetchall()}
+        if "section_id" not in columns:
+            conn.execute("ALTER TABLE notices ADD COLUMN section_id TEXT NOT NULL DEFAULT ''")
 
     # 创建 SQLite 连接并启用按列名读取结果。
     def _connect(self) -> sqlite3.Connection:

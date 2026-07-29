@@ -324,7 +324,7 @@ const initSettings = async () => {
   const selected = new Set(me.preferences || []);
 
   grid.innerHTML = (sectionsData.sections || []).map((section) => {
-    const checked = selected.size === 0 || selected.has(section);
+    const checked = selected.has(section);
     const safeSection = escapeHtml(section);
     return `
       <label class="section-card ${checked ? "active" : ""}">

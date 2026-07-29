@@ -25,14 +25,15 @@ def normalize_url(url: str) -> str:
 
 
 # 根据通知摘要生成稳定 SHA256 指纹。
-def build_notice_hash(notice: ResultSummary) -> str:
+def build_notice_hash(notice: ResultSummary, section_id: str = "") -> str:
     """生成稳定指纹，用于 SQLite 去重。
 
-    优先依赖 URL；同时加入 section/title，避免不同站点出现同 URL 或异常 URL 时冲突。
+    优先依赖 URL；同时加入 section_id/section/title，避免不同脚本或异常 URL 时冲突。
     """
 
     payload = "\n".join(
         (
+            normalize_text(section_id),
             normalize_text(notice.section),
             normalize_text(notice.title),
             normalize_url(notice.url),

@@ -60,9 +60,9 @@ def get_section_names() -> list[str]:
     return [section.section_name for section in discover_sections()]
 
 
-# 新用户默认订阅当前所有板块。
+# 新用户默认不订阅任何板块，由用户进入设置页后自行勾选。
 def get_default_preferences() -> list[str]:
-    return get_section_names()
+    return []
 
 
 # 获取或创建订阅用户，已注销用户重新登录时自动恢复。
@@ -74,7 +74,7 @@ def get_or_create_subscriber(email: str) -> Subscriber:
         defaults={
             "encrypted_email": encrypt_email(normalized),
             "preferences": get_default_preferences(),
-            "known_sections": get_default_preferences(),
+            "known_sections": get_section_names(),
             "is_active": True,
         },
     )
@@ -91,21 +91,21 @@ def get_or_create_subscriber(email: str) -> Subscriber:
     return subscriber
 
 
-# 返回用户实际生效的订阅偏好，并把新增板块默认加入勾选。
+# 返回用户实际生效的订阅偏好，并记录用户已经见过的新增板块。
 def get_effective_preferences(subscriber: Subscriber) -> list[str]:
     # 读取当前后端真实可订阅板块和用户历史已见板块。
     available = get_section_names()
     known = set(subscriber.known_sections or [])
     selected = set(subscriber.preferences or [])
 
-    # 新增板块对老用户默认勾选，避免新增爬虫后用户无感漏收。
+    # 新增板块默认不勾选，只更新已见板块记录，等待用户自行选择。
     new_sections = [section for section in available if section not in known]
-    if new_sections:
-        selected.update(new_sections)
-        subscriber.preferences = [section for section in available if section in selected]
+    effective_preferences = [section for section in available if section in selected]
+    if new_sections or effective_preferences != list(subscriber.preferences or []):
+        subscriber.preferences = effective_preferences
         subscriber.known_sections = available
         subscriber.save(update_fields=["preferences", "known_sections", "updated_at"])
-    return [section for section in available if section in selected]
+    return effective_preferences
 
 
 # 记录验证码请求并检查 IP 是否已被封禁或需要新加入黑名单。
@@ -304,7 +304,7 @@ def update_preferences(subscriber: Subscriber, selected_sections: Sequence[str])
     selected = [section for section in selected_sections if section in available_sections]
     subscriber.preferences = selected
 
-    # 保存时记录当前已见板块，用于后续新增板块默认勾选。
+    # 保存时记录当前已见板块，新增板块后仍默认不勾选。
     subscriber.known_sections = list(available_sections)
     subscriber.save(update_fields=["preferences", "known_sections", "updated_at"])
 

@@ -24,6 +24,7 @@ class LoadedCrawler:
     """Runner 已加载的单个板块扫描入口。"""
 
     module_name: str
+    section_id: str
     section_name: str
     crawl: SourceCrawler
 
@@ -36,10 +37,12 @@ def load_crawlers() -> list[LoadedCrawler]:
         crawl = getattr(module, function_name, None)
         if not callable(crawl):
             raise TypeError(f"{module_name} 必须暴露可调用的 {function_name}() 函数")
+        section_id = getattr(module, "SECTION_ID", "")
         section_name = getattr(module, "SECTION_NAME", "")
         crawlers.append(
             LoadedCrawler(
                 module_name=f"{module_name}.{function_name}",
+                section_id=normalize_text(section_id) if isinstance(section_id, str) else "",
                 section_name=normalize_text(section_name) if isinstance(section_name, str) else "",
                 crawl=crawl,
             )
@@ -55,7 +58,7 @@ def run_once() -> int:
     store = NoticeStore()
     is_initial_deploy = not store.exists()
     store.initialize()
-    existing_sections_before_scan = store.get_existing_sections()
+    existing_section_ids_before_scan = store.get_existing_section_ids()
 
     crawlers = load_crawlers()
     logger.info("雷达扫描启动：%s 个网页板块。", len(crawlers))
@@ -81,12 +84,12 @@ def run_once() -> int:
             logger.warning("扫描中止：%s", crawler.module_name)
             continue
 
-        new_records = store.add_notices(results)
+        new_records = store.add_notices(results, section_id=crawler.section_id)
         all_new_count += len(new_records)
-        if not is_initial_deploy and _is_new_section(crawler.section_name, existing_sections_before_scan):
+        if not is_initial_deploy and _is_new_section_id(crawler.section_id, existing_section_ids_before_scan):
             logger.info(
                 "检测到新板块初始化：%s，本轮新增 %s 条仅入库，不纳入今日统计和邮件通知。",
-                crawler.section_name or crawler.module_name,
+                crawler.section_id or crawler.module_name,
                 len(new_records),
             )
         else:
@@ -159,9 +162,9 @@ def run_once() -> int:
     return 1 if scan_failure_count or mail_failure_count else 0
 
 
-# 判断当前板块在本轮扫描开始前是否从未入库过。
-def _is_new_section(section_name: str, existing_sections_before_scan: set[str]) -> bool:
-    return bool(section_name) and section_name not in existing_sections_before_scan
+# 判断当前唯一板块脚本 ID 在本轮扫描开始前是否从未入库过。
+def _is_new_section_id(section_id: str, existing_section_ids_before_scan: set[str]) -> bool:
+    return bool(section_id) and section_id not in existing_section_ids_before_scan
 
 
 # 将异常压缩为适合 INFO 级日志展示的短原因。

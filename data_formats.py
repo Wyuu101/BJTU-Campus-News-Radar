@@ -22,6 +22,7 @@ class NoticeRecord:
     """已入库且可用于邮件通知的通知记录。"""
 
     notice_id: int
+    section_id: str
     section: str
     title: str
     url: str

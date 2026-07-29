@@ -27,6 +27,7 @@ REQUEST_DELAY_SECONDS = 0.5
 
 # 每个网页板块一个独立脚本；元组格式为：("模块导入路径", "入口函数名")。
 SOURCE_ADAPTERS = [
+    # 校园通用
     ("scrape_scripts.scrape_section_1", "crawl"),
     ("scrape_scripts.scrape_section_2", "crawl"),
     ("scrape_scripts.scrape_section_3", "crawl"),
@@ -55,17 +56,109 @@ SOURCE_ADAPTERS = [
     ("scrape_scripts.scrape_section_26", "crawl"),
     ("scrape_scripts.scrape_section_27", "crawl"),
 
+    # 电信
+    ("scrape_scripts.scrape_section_80_01", "crawl"),
+    ("scrape_scripts.scrape_section_80_02", "crawl"),
+    ("scrape_scripts.scrape_section_80_03", "crawl"),
+    ("scrape_scripts.scrape_section_80_04", "crawl"),
+    ("scrape_scripts.scrape_section_80_05", "crawl"),
+    ("scrape_scripts.scrape_section_80_06", "crawl"),
+    ("scrape_scripts.scrape_section_80_07", "crawl"),
 
-    ("scrape_scripts.scrape_section_801", "crawl"),
-    ("scrape_scripts.scrape_section_802", "crawl"),
-    ("scrape_scripts.scrape_section_803", "crawl"),
-    ("scrape_scripts.scrape_section_804", "crawl"),
-    ("scrape_scripts.scrape_section_805", "crawl"),
-    ("scrape_scripts.scrape_section_806", "crawl"),
-    ("scrape_scripts.scrape_section_807", "crawl"),
-    ("scrape_scripts.scrape_section_811", "crawl"),
-    ("scrape_scripts.scrape_section_821", "crawl"),
+    # 经管
+    ("scrape_scripts.scrape_section_81_01", "crawl"),
+    ("scrape_scripts.scrape_section_81_02", "crawl"),
+    ("scrape_scripts.scrape_section_81_03", "crawl"),
+    ("scrape_scripts.scrape_section_81_04", "crawl"),
+    ("scrape_scripts.scrape_section_81_05", "crawl"),
+    ("scrape_scripts.scrape_section_81_06", "crawl"),
+    ("scrape_scripts.scrape_section_81_07", "crawl"),
+    ("scrape_scripts.scrape_section_81_08", "crawl"),
+    ("scrape_scripts.scrape_section_81_09", "crawl"),
+    ("scrape_scripts.scrape_section_81_10", "crawl"),
+    ("scrape_scripts.scrape_section_81_11", "crawl"),
+    ("scrape_scripts.scrape_section_81_12", "crawl"),
+    ("scrape_scripts.scrape_section_81_13", "crawl"),
+    ("scrape_scripts.scrape_section_81_14", "crawl"),
 
+    # 自动化与智能
+    ("scrape_scripts.scrape_section_82_01", "crawl"),
+    ("scrape_scripts.scrape_section_82_02", "crawl"),
+    ("scrape_scripts.scrape_section_82_03", "crawl"),
+    ("scrape_scripts.scrape_section_82_04", "crawl"),
+    ("scrape_scripts.scrape_section_82_05", "crawl"),
+    ("scrape_scripts.scrape_section_82_06", "crawl"),
+    ("scrape_scripts.scrape_section_82_07", "crawl"),
+    ("scrape_scripts.scrape_section_82_08", "crawl"),
+    ("scrape_scripts.scrape_section_82_09", "crawl"),
+    ("scrape_scripts.scrape_section_82_10", "crawl"),
+    ("scrape_scripts.scrape_section_82_11", "crawl"),
+
+    # 交运
+    ("scrape_scripts.scrape_section_83_01", "crawl"),
+    ("scrape_scripts.scrape_section_83_02", "crawl"),
+    ("scrape_scripts.scrape_section_83_03", "crawl"),
+    ("scrape_scripts.scrape_section_83_04", "crawl"),
+    ("scrape_scripts.scrape_section_83_05", "crawl"),
+    ("scrape_scripts.scrape_section_83_06", "crawl"),
+    ("scrape_scripts.scrape_section_83_07", "crawl"),
+    ("scrape_scripts.scrape_section_83_08", "crawl"),
+
+    # 计算机
+    ("scrape_scripts.scrape_section_84_01", "crawl"),
+    ("scrape_scripts.scrape_section_84_02", "crawl"),
+    ("scrape_scripts.scrape_section_84_03", "crawl"),
+    ("scrape_scripts.scrape_section_84_04", "crawl"),
+    ("scrape_scripts.scrape_section_84_05", "crawl"),
+    ("scrape_scripts.scrape_section_84_06", "crawl"),
+    ("scrape_scripts.scrape_section_84_07", "crawl"),
+    ("scrape_scripts.scrape_section_84_08", "crawl"),
+    ("scrape_scripts.scrape_section_84_09", "crawl"),
+    ("scrape_scripts.scrape_section_84_10", "crawl"),
+    ("scrape_scripts.scrape_section_84_11", "crawl"),
+    ("scrape_scripts.scrape_section_84_12", "crawl"),
+    ("scrape_scripts.scrape_section_84_13", "crawl"),
+    ("scrape_scripts.scrape_section_84_14", "crawl"),
+    ("scrape_scripts.scrape_section_84_15", "crawl"),
+
+    # 软件学院
+    ("scrape_scripts.scrape_section_85_01", "crawl"),
+    ("scrape_scripts.scrape_section_85_02", "crawl"),
+    ("scrape_scripts.scrape_section_85_03", "crawl"),
+    ("scrape_scripts.scrape_section_85_04", "crawl"),
+    ("scrape_scripts.scrape_section_85_05", "crawl"),
+    ("scrape_scripts.scrape_section_85_06", "crawl"),
+    ("scrape_scripts.scrape_section_85_07", "crawl"),
+    ("scrape_scripts.scrape_section_85_08", "crawl"),
+    ("scrape_scripts.scrape_section_85_09", "crawl"),
+    ("scrape_scripts.scrape_section_85_10", "crawl"),
+    ("scrape_scripts.scrape_section_85_11", "crawl"),
+    ("scrape_scripts.scrape_section_85_12", "crawl"),
+    ("scrape_scripts.scrape_section_85_13", "crawl"),
+    ("scrape_scripts.scrape_section_85_14", "crawl"),
+    ("scrape_scripts.scrape_section_85_15", "crawl"),
+
+    # 法学院
+    ("scrape_scripts.scrape_section_86_01", "crawl"),
+    ("scrape_scripts.scrape_section_86_02", "crawl"),
+    ("scrape_scripts.scrape_section_86_03", "crawl"),
+    ("scrape_scripts.scrape_section_86_04", "crawl"),
+    ("scrape_scripts.scrape_section_86_05", "crawl"),
+    ("scrape_scripts.scrape_section_86_06", "crawl"),
+    ("scrape_scripts.scrape_section_86_07", "crawl"),
+    ("scrape_scripts.scrape_section_86_08", "crawl"),
+    ("scrape_scripts.scrape_section_86_09", "crawl"),
+    ("scrape_scripts.scrape_section_86_10", "crawl"),
+    ("scrape_scripts.scrape_section_86_11", "crawl"),
+    ("scrape_scripts.scrape_section_86_12", "crawl"),
+    ("scrape_scripts.scrape_section_86_13", "crawl"),
+    ("scrape_scripts.scrape_section_86_14", "crawl"),
+
+    # 数统
+    ("scrape_scripts.scrape_section_87_01", "crawl"),
+    ("scrape_scripts.scrape_section_87_02", "crawl"),
+    ("scrape_scripts.scrape_section_87_03", "crawl"),
+    ("scrape_scripts.scrape_section_87_04", "crawl"),
 ]
 
 # 登录验证码 SMTP 服务器端口；SSL 通常为 465，STARTTLS 通常为 587。
