@@ -23,6 +23,11 @@ DEBUG = True
 # 允许访问的主机名；本地开发默认只允许 localhost。
 ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost",
+    "http://127.0.0.1"
+]
+
 # Django 应用列表，当前只启用必要内置组件和 notice_app。
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
@@ -80,6 +85,9 @@ USE_I18N = True
 
 # 使用带时区的 datetime 存储和计算。
 USE_TZ = True
+
+# 静态资源根目录
+STATIC_ROOT = BASE_DIR / "web" / "staticfiles"
 
 # 静态资源访问前缀。
 STATIC_URL = "static/"
