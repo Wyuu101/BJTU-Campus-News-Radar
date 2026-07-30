@@ -18,7 +18,7 @@ SECTION_NAME = "经管学院-本科生新闻动态"
 
 BASE_URL = "https://sem.bjtu.edu.cn/lists-bk_xwdt.html"
 
-MAX_PAGES = 3
+MAX_PAGES = 1
 
 HEADERS = {
     "User-Agent": (

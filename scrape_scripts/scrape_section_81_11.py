@@ -18,7 +18,7 @@ SECTION_NAME = "经管学院-研究生学生培养"
 
 BASE_URL = "https://sem.bjtu.edu.cn/lists-yjs_zsdt.html"
 
-MAX_PAGES = 3
+MAX_PAGES = 1
 
 HEADERS = {
     "User-Agent": (

@@ -18,7 +18,7 @@ SECTION_NAME = "经管学院-活动预报"
 
 BASE_URL = "https://sem.bjtu.edu.cn/lists-sem_hdyb.html"
 
-MAX_PAGES = 2
+MAX_PAGES = 1
 
 HEADERS = {
     "User-Agent": (

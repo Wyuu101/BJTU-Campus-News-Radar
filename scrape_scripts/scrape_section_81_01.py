@@ -18,7 +18,7 @@ SECTION_NAME = "经管学院-通知公告"
 
 BASE_URL = "https://sem.bjtu.edu.cn/lists-sem_tzgg.html"
 
-MAX_PAGES = 4
+MAX_PAGES = 1
 
 HEADERS = {
     "User-Agent": (

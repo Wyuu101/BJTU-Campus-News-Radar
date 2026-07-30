@@ -18,7 +18,7 @@ SECTION_NAME = "经管学院-本科生教学文件"
 
 BASE_URL = "https://sem.bjtu.edu.cn/lists-bk_jxwj.html"
 
-MAX_PAGES = 3
+MAX_PAGES = 1
 
 HEADERS = {
     "User-Agent": (

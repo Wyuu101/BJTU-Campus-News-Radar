@@ -321,18 +321,26 @@ const initSettings = async () => {
   if (deliveryHint) {
     deliveryHint.textContent = `如果有校园新事发现，将会在当天的${me.dailyNotificationDisplayTime || "18:30"}左右为您整合消息索引并发送到您的邮箱。`;
   }
-  const selected = new Set(me.preferences || []);
+  const selectedPreferences = Array.isArray(me.preferences) ? me.preferences : [];
+  const selected = new Set(selectedPreferences.map((section) => String(section)));
 
   grid.innerHTML = (sectionsData.sections || []).map((section) => {
-    const checked = selected.has(section);
-    const safeSection = escapeHtml(section);
+    const sectionName = String(section);
+    const checked = selected.has(sectionName);
+    const safeSection = escapeHtml(sectionName);
     return `
       <label class="section-card ${checked ? "active" : ""}">
-        <input type="checkbox" value="${safeSection}" ${checked ? "checked" : ""}>
+        <input type="checkbox" value="${safeSection}" autocomplete="off" ${checked ? "checked" : ""}>
         <span>${safeSection}</span>
       </label>
     `;
   }).join("");
+
+  grid.querySelectorAll("input[type='checkbox']").forEach((input) => {
+    const checked = selected.has(input.value);
+    input.checked = checked;
+    input.closest(".section-card").classList.toggle("active", checked);
+  });
 
   grid.addEventListener("change", (event) => {
     const input = event.target;
