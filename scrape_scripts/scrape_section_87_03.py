@@ -62,7 +62,6 @@ def parse_page(
     if news_list is None:
         logger.debug("第 %s 页未找到 ul.block-list232", page)
         return []
-    print(news_list)
     results: list[ResultSummary] = []
     for item in news_list.find_all("li", recursive=False):
         result = _parse_list_item(item, response.url)
